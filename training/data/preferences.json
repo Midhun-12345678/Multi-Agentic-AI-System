@@ -1,0 +1,7 @@
+[
+  {
+    "prompt": "Review this code",
+    "chosen": "This version is clean and efficient...",
+    "rejected": "This version is messy..."
+  }
+]
