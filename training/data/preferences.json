@@ -1,7 +1,7 @@
 [
   {
-    "prompt": "Review this code",
-    "chosen": "This version is clean and efficient...",
-    "rejected": "This version is messy..."
+    "prompt": "Review this AI startup plan",
+    "chosen": "This plan is concise, actionable, and focuses on MVP first...",
+    "rejected": "This plan is vague and too high-level..."
   }
 ]

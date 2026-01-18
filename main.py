@@ -11,4 +11,4 @@ app = FastAPI()
 def run_agents(payload: dict):
     user_input = payload.get("task")
     result = run_crew(user_input)
-    return {"result": result}
+    return result
