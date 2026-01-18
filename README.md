@@ -34,6 +34,7 @@ Together they form a **goal-driven AI workflow** that mimics real decision pipel
 
 ---
 
+
 ## 🖥️ Demo
 
 ### Streamlit UI
@@ -50,6 +51,14 @@ Users can:
 The FastAPI service runs the full multi-agent workflow and returns structured outputs for each agent stage.
 
 ---
+
+##  Upgrade — Advanced Agentic Intelligence
+
+- Integrated Self-RAG using LlamaIndex
+- Hybrid retrieval pipeline + reranking
+- Critic-guided retrieval loop to reduce hallucinations
+- Built DPO fine-tuning pipeline for preference-aligned agents
+- Improved reasoning depth & factual grounding
 
 ## 🧩 Tech Stack
 
