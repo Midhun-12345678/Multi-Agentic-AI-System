@@ -199,7 +199,7 @@ class FileJobStore:
                 try:
                     with open(job_path, 'r') as f:
                         self._cache[job_id] = json.load(f)
-                except:
+                except (json.JSONDecodeError, IOError):
                     return None
             else:
                 return None
