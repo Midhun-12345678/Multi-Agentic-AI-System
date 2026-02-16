@@ -131,7 +131,7 @@ def run_crew(
         
         # Run the crew
         try:
-            final_result = crew.kickoff()
+            crew.kickoff()  # Execute crew tasks
         except Exception as e:
             logger.error(f"[{job_id}] Crew execution failed: {e}")
             raise
