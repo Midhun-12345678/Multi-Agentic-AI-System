@@ -109,12 +109,12 @@ class FileJobStore:
             if temp_fd is not None:
                 try:
                     os.close(temp_fd)
-                except:
+                except OSError:
                     pass
             if temp_path and os.path.exists(temp_path):
                 try:
                     os.unlink(temp_path)
-                except:
+                except OSError:
                     pass
     
     def create_job(self, job_id: str, resume_text: str = "", job_description: str = "", template: str = "professional") -> Dict:
