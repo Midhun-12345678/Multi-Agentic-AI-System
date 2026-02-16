@@ -1,0 +1,67 @@
+<html>
+<head>
+<style>
+body { font-family: Arial; margin:40px; }
+h1 { color:#222; }
+h2 { color:#444; font-size:20px; margin-top:30px; border-bottom:2px solid #ddd; padding-bottom:5px; }
+h3 { color:#666; font-size:16px; margin-top:20px; }
+.contact-info { color:#666; font-size:14px; margin-bottom:20px; }
+.experience-item, .project-item { margin-bottom:20px; }
+.job-title { font-weight:bold; color:#333; }
+.company { color:#666; font-style:italic; }
+</style>
+</head>
+<body>
+<h1>{{name}}</h1>
+
+{% if email or phone or linkedin or github %}
+<div class="contact-info">
+  {% if email %}<div>Email: {{email}}</div>{% endif %}
+  {% if phone %}<div>Phone: {{phone}}</div>{% endif %}
+  {% if linkedin %}<div>LinkedIn: {{linkedin}}</div>{% endif %}
+  {% if github %}<div>GitHub: {{github}}</div>{% endif %}
+</div>
+{% endif %}
+
+{% if summary %}
+<h2>Professional Summary</h2>
+<p>{{summary}}</p>
+{% endif %}
+
+{% if skills %}
+<h2>Technical Skills</h2>
+<ul>
+{% for skill in skills %}
+  <li>{{skill}}</li>
+{% endfor %}
+</ul>
+{% endif %}
+
+{% if experience %}
+<h2>Experience</h2>
+{% for exp in experience %}
+<div class="experience-item">
+  <div class="job-title">{{exp.role}}</div>
+  <div class="company">{{exp.company}}</div>
+  <p>{{exp.description}}</p>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if projects %}
+<h2>Projects</h2>
+{% for project in projects %}
+<div class="project-item">
+  <h3>{{project.title}}</h3>
+  <p>{{project.details}}</p>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if education %}
+<h2>Education</h2>
+<p>{{education}}</p>
+{% endif %}
+
+</body>
+</html>

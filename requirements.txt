@@ -1,0 +1,12 @@
+crewai
+fastapi
+python-dotenv
+uvicorn[standard]
+openai~=1.83.0
+tokenizers~=0.20.3
+PyPDF2
+jinja2
+weasyprint
+streamlit
+requests
+python-multipart
