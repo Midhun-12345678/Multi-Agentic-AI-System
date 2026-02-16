@@ -1,0 +1,161 @@
+{
+  "job_id": "5fb6a55b-d53b-4dec-a174-feee4f7dc877",
+  "status": "processing",
+  "created_at": "2026-02-16T04:44:16.891638+00:00",
+  "updated_at": "2026-02-16T04:44:48.355836+00:00",
+  "resume_text": "John Doe\njohn.doe@email.com\n+1-555-123-4567\nlinkedin.com/in/johndoe\ngithub.com/johndoe\nSUMMARY\nExperienced software engineer with 5+ years building scalable web applications.\nEXPERIENCE\nSenior Software Engineer\nTech Company Inc, San Francisco, CA\n2020 - Present\n- Developed microservices architecture serving 1M+ users\n- Led team of 5 engineers\nSoftware Engineer\nStartup XYZ, Remote\n2018 - 2020\n- Built full-stack features using React and Node.js\nPROJECTS\nE-commerce Platform\n- Built scalable e-commerce solution with payment processing\nSKILLS\nPython, JavaScript, React, Node.js, AWS, Docker\nEDUCATION\nBachelor of Science in Computer Science\nMIT, 2018",
+  "job_description": "We are looking for a Senior Software Engineer with experience in Python, React, and AWS. 5+ years experience required. Must have experience with microservices and cloud architecture.",
+  "template": "professional",
+  "agents": {
+    "planner": {
+      "status": "running",
+      "output": "**ATS Optimization Plan for John Doe's Resume**\n\n---\n\n**Current Resume:**\n\nJohn Doe  \njohn.doe@email.com  \n+1-555-123-4567  \nlinkedin.com/in/johndoe  \ngithub.com/johndoe  \n\n**SUMMARY**  \nExperienced software engineer with 5+ years building scalable web applications.\n\n**EXPERIENCE**  \n**Senior Software Engineer**  \nTech Company Inc, San Francisco, CA  \n2020 - Present  \n- Developed microservices architecture serving 1M+ users  \n- Led team of 5 engineers  \n\n**Software Engineer**  \nStartup XYZ, Remote  \n2018 - 2020  \n- Built full-stack features using React and Node.js  \n\n**PROJECTS**  \n**E-commerce Platform**  \n- Built scalable e-commerce solution with payment processing  \n\n**SKILLS**  \nPython, JavaScript, React, Node.js, AWS, Docker  \n\n**EDUCATION**  \nBachelor of Science in Computer Science  \nMIT, 2018  \n\n---\n\n**Analysis of Job Description:**\n\n**Key Requirements:**\n1. Senior Software Engineer\n2. Experience in Python, React, and AWS\n3. 5+ years of experience\n4. Experience with microservices and cloud architecture\n\n**Gaps and Missing Keywords:**\n1. **Job Title**: The title \"Senior Software Engineer\" is present, which is good.\n2. **Skills**: Python, React, and AWS are mentioned, but the resume could benefit from explicitly stating \"cloud architecture\" and \"microservices\" in the skills section.\n3. **Experience**: The resume mentions 5+ years of experience, which aligns with the job description.\n4. **Technical Details**: The resume lacks specific examples of cloud architecture and microservices in the context of projects or responsibilities.\n5. **Projects Section**: The projects section is minimal and could be expanded to include more relevant details that showcase experience with cloud architecture.\n\n---\n\n**Recommendations for Improvement:**\n\n1. **Enhance the Summary**:\n   - Add specific technologies and methodologies to highlight relevant experience.\n   - Example: \"Results-driven Senior Software Engineer with over 5 years of experience in developing scalable web applications using Python, React, and AWS, with a strong focus on microservices and cloud architecture.\"\n\n2. **Expand the Experience Section**:\n   - Include specific achievements and responsibilities that demonstrate expertise in cloud architecture and microservices.\n   - Example: \n     - \"Designed and implemented cloud-native microservices architecture on AWS, improving system scalability and reliability.\"\n     - \"Collaborated with cross-functional teams to deploy applications using Docker and Kubernetes, enhancing CI/CD processes.\"\n\n3. **Revise the Projects Section**:\n   - Add more detail to existing projects or include additional relevant projects that showcase skills in AWS and microservices.\n   - Example:\n     - **E-commerce Platform**  \n       - \"Developed a scalable e-commerce solution with integrated payment processing, utilizing AWS services such as Lambda and S3 for cloud storage and serverless architecture.\"\n\n4. **Skills Section**:\n   - Reorganize and expand the skills section to include \"Cloud Architecture\" and \"Microservices\" explicitly.\n   - Example: \"Skills: Python, JavaScript, React, Node.js, AWS (Lambda, S3, EC2), Docker, Microservices, Cloud Architecture.\"\n\n---\n\n**Optimized Resume Content:**\n\nJohn Doe  \njohn.doe@email.com  \n+1-555-123-4567  \nlinkedin.com/in/johndoe  \ngithub.com/johndoe  \n\n**SUMMARY**  \nResults-driven Senior Software Engineer with over 5 years of experience in developing scalable web applications using Python, React, and AWS, with a strong focus on microservices and cloud architecture.\n\n**EXPERIENCE**  \n**Senior Software Engineer**  \nTech Company Inc, San Francisco, CA  \n2020 - Present  \n- Developed and implemented cloud-native microservices architecture on AWS, serving over 1M users and improving system scalability and reliability.  \n- Led a team of 5 engineers in the design and deployment of applications using Docker and Kubernetes, enhancing CI/CD processes.  \n\n**Software Engineer**  \nStartup XYZ, Remote  \n2018 - 2020  \n- Built full-stack features using React and Node.js, contributing to the development of high-performance web applications.  \n- Collaborated with cross-functional teams to integrate AWS services for cloud deployment and data storage.\n\n**PROJECTS**  \n**E-commerce Platform**  \n- Developed a scalable e-commerce solution with integrated payment processing, utilizing AWS services such as Lambda and S3 for cloud storage and serverless architecture.  \n\n**SKILLS**  \nPython, JavaScript, React, Node.js, AWS (Lambda, S3, EC2), Docker, Microservices, Cloud Architecture  \n\n**EDUCATION**  \nBachelor of Science in Computer Science  \nMIT, 2018  \n\n---\n\nThis optimized resume aligns closely with the job description, enhancing the chances of passing through ATS systems and catching the attention of recruiters.",
+      "started_at": "2026-02-16T04:44:16.910467+00:00",
+      "completed_at": "2026-02-16T04:44:48.321669+00:00",
+      "messages": [
+        {
+          "timestamp": "2026-02-16T04:44:16.901395+00:00",
+          "message": "Extracting baseline from original resume..."
+        },
+        {
+          "timestamp": "2026-02-16T04:44:16.913183+00:00",
+          "message": "Analyzing resume structure and content..."
+        },
+        {
+          "timestamp": "2026-02-16T04:44:16.915302+00:00",
+          "message": "Identifying gaps vs job requirements..."
+        },
+        {
+          "timestamp": "2026-02-16T04:44:16.917045+00:00",
+          "message": "Building optimization strategy..."
+        },
+        {
+          "timestamp": "2026-02-16T04:44:48.351810+00:00",
+          "message": "Analyzing resume structure and content..."
+        },
+        {
+          "timestamp": "2026-02-16T04:44:48.353877+00:00",
+          "message": "Identifying gaps vs job requirements..."
+        },
+        {
+          "timestamp": "2026-02-16T04:44:48.355836+00:00",
+          "message": "Building optimization strategy..."
+        }
+      ]
+    },
+    "executor": {
+      "status": "complete",
+      "output": "{\n  \"name\": \"JOHN DOE\",\n  \"email\": \"john.doe@email.com\",\n  \"phone\": \"+1-555-123-4567\",\n  \"linkedin\": \"linkedin.com/in/johndoe\",\n  \"github\": \"github.com/johndoe\",\n  \"summary\": \"Results-driven Senior Software Engineer with over 5 years of experience in developing scalable web applications using Python, React, and AWS, with a strong focus on microservices and cloud architecture.\",\n  \"skills\": [\n    \"Languages: Python, JavaScript\",\n    \"Frameworks: React, Node.js\",\n    \"Cloud: AWS (Lambda, S3, EC2)\",\n    \"Containers: Docker\",\n    \"Architecture: Microservices, Cloud Architecture\"\n  ],\n  \"experience\": [\n    {\n      \"company\": \"Tech Company Inc, San Francisco, CA\",\n      \"role\": \"Senior Software Engineer | Full-time\",\n      \"description\": \"- Developed and implemented cloud-native microservices architecture on AWS, serving over 1M users and improving system scalability and reliability.\\n- Led a team of 5 engineers in the design and deployment of applications using Docker and Kubernetes, enhancing CI/CD processes.\"\n    },\n    {\n      \"company\": \"Startup XYZ, Remote\",\n      \"role\": \"Software Engineer | Full-time\",\n      \"description\": \"- Built full-stack features using React and Node.js, contributing to the development of high-performance web applications.\\n- Collaborated with cross-functional teams to integrate AWS services for cloud deployment and data storage.\"\n    }\n  ],\n  \"projects\": [\n    {\n      \"title\": \"E-commerce Platform\",\n      \"details\": \"- Developed a scalable e-commerce solution with integrated payment processing, utilizing AWS services such as Lambda and S3 for cloud storage and serverless architecture.\"\n    }\n  ],\n  \"education\": \"Bachelor of Science in Computer Science\\nMIT, 2018\"\n}",
+      "started_at": "2026-02-16T04:44:48.326092+00:00",
+      "completed_at": "2026-02-16T04:44:48.337115+00:00",
+      "messages": [
+        {
+          "timestamp": "2026-02-16T04:44:48.328329+00:00",
+          "message": "Extracting data from original resume..."
+        },
+        {
+          "timestamp": "2026-02-16T04:44:48.332011+00:00",
+          "message": "Applying template formatting..."
+        },
+        {
+          "timestamp": "2026-02-16T04:44:48.334661+00:00",
+          "message": "Enhancing with ATS keywords..."
+        },
+        {
+          "timestamp": "2026-02-16T04:44:48.343069+00:00",
+          "message": "Retry 1: Correcting data preservation issues..."
+        }
+      ]
+    },
+    "critic": {
+      "status": "pending",
+      "output": null,
+      "started_at": null,
+      "completed_at": null,
+      "messages": [
+        {
+          "timestamp": "2026-02-16T04:44:48.339111+00:00",
+          "message": "Validating field mapping..."
+        }
+      ]
+    }
+  },
+  "result": null,
+  "error": null,
+  "progress": 66,
+  "retry_count": 1,
+  "validation_warnings": [
+    {
+      "timestamp": "2026-02-16T04:44:48.341108+00:00",
+      "warning": "Project mismatch: Original has 2 projects, output has 1"
+    }
+  ],
+  "logs": [
+    {
+      "timestamp": "2026-02-16T04:44:16.897269+00:00",
+      "event": "job_created",
+      "details": {
+        "status": "queued"
+      }
+    },
+    {
+      "timestamp": "2026-02-16T04:44:16.910485+00:00",
+      "event": "agent_status_update",
+      "details": {
+        "agent_name": "planner",
+        "status": "running",
+        "message": null
+      }
+    },
+    {
+      "timestamp": "2026-02-16T04:44:48.321689+00:00",
+      "event": "agent_status_update",
+      "details": {
+        "agent_name": "planner",
+        "status": "complete",
+        "message": null
+      }
+    },
+    {
+      "timestamp": "2026-02-16T04:44:48.326104+00:00",
+      "event": "agent_status_update",
+      "details": {
+        "agent_name": "executor",
+        "status": "running",
+        "message": null
+      }
+    },
+    {
+      "timestamp": "2026-02-16T04:44:48.337131+00:00",
+      "event": "agent_status_update",
+      "details": {
+        "agent_name": "executor",
+        "status": "complete",
+        "message": null
+      }
+    },
+    {
+      "timestamp": "2026-02-16T04:44:48.341114+00:00",
+      "event": "validation_warning",
+      "details": {
+        "warning": "Project mismatch: Original has 2 projects, output has 1"
+      }
+    },
+    {
+      "timestamp": "2026-02-16T04:44:48.345068+00:00",
+      "event": "retry_attempted",
+      "details": {
+        "retry_count": 1
+      }
+    },
+    {
+      "timestamp": "2026-02-16T04:44:48.349151+00:00",
+      "event": "agent_status_update",
+      "details": {
+        "agent_name": "planner",
+        "status": "running",
+        "message": null
+      }
+    }
+  ]
+}
