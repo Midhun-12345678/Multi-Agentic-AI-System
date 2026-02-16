@@ -254,7 +254,7 @@ async def websocket_endpoint(websocket: WebSocket, job_id: str):
             except asyncio.TimeoutError:
                 try:
                     await websocket.send_text("ping")
-                except:
+                except Exception:
                     break
                     
     except WebSocketDisconnect:
