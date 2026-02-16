@@ -1,0 +1,79 @@
+{
+  "job_id": "862f987d-d1d5-44e1-b2cc-6eb5ff9f16b9",
+  "status": "error",
+  "created_at": "2026-02-16T04:42:56.853131+00:00",
+  "updated_at": "2026-02-16T04:43:01.194350+00:00",
+  "resume_text": "John Doe\njohn.doe@email.com\n+1-555-123-4567\nlinkedin.com/in/johndoe\ngithub.com/johndoe\nSUMMARY\nExperienced software engineer with 5+ years building scalable web applications.\nEXPERIENCE\nSenior Software Engineer\nTech Company Inc, San Francisco, CA\n2020 - Present\n- Developed microservices architecture serving 1M+ users\n- Led team of 5 engineers\nSoftware Engineer\nStartup XYZ, Remote\n2018 - 2020\n- Built full-stack features using React and Node.js\nPROJECTS\nE-commerce Platform\n- Built scalable e-commerce solution with payment processing\nSKILLS\nPython, JavaScript, React, Node.js, AWS, Docker\nEDUCATION\nBachelor of Science in Computer Science\nMIT, 2018",
+  "job_description": "We are looking for a Senior Software Engineer with experience in Python, React, and AWS. 5+ years experience required.",
+  "template": "professional",
+  "agents": {
+    "planner": {
+      "status": "running",
+      "output": null,
+      "started_at": "2026-02-16T04:42:56.866432+00:00",
+      "completed_at": null,
+      "messages": [
+        {
+          "timestamp": "2026-02-16T04:42:56.859350+00:00",
+          "message": "Extracting baseline from original resume..."
+        },
+        {
+          "timestamp": "2026-02-16T04:42:56.868418+00:00",
+          "message": "Analyzing resume structure and content..."
+        },
+        {
+          "timestamp": "2026-02-16T04:42:56.870134+00:00",
+          "message": "Identifying gaps vs job requirements..."
+        },
+        {
+          "timestamp": "2026-02-16T04:42:56.872053+00:00",
+          "message": "Building optimization strategy..."
+        }
+      ]
+    },
+    "executor": {
+      "status": "pending",
+      "output": null,
+      "started_at": null,
+      "completed_at": null,
+      "messages": []
+    },
+    "critic": {
+      "status": "pending",
+      "output": null,
+      "started_at": null,
+      "completed_at": null,
+      "messages": []
+    }
+  },
+  "result": null,
+  "error": "Error: Failed to connect to OpenAI API: Connection error.\nTraceback (most recent call last):\n  File \"/root/.venv/lib/python3.11/site-packages/httpx/_transports/default.py\", line 101, in map_httpcore_exceptions\n    yield\n  File \"/root/.venv/lib/python3.11/site-packages/httpx/_transports/default.py\", line 250, in handle_request\n    resp = self._pool.handle_request(req)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py\", line 256, in handle_request\n    raise exc from None\n  File \"/root/.venv/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py\", line 236, in handle_request\n    response = connection.handle_request(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/httpcore/_sync/connection.py\", line 101, in handle_request\n    raise exc\n  File \"/root/.venv/lib/python3.11/site-packages/httpcore/_sync/connection.py\", line 78, in handle_request\n    stream = self._connect(request)\n             ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/httpcore/_sync/connection.py\", line 124, in _connect\n    stream = self._network_backend.connect_tcp(**kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/httpcore/_backends/sync.py\", line 207, in connect_tcp\n    with map_exceptions(exc_map):\n  File \"/usr/local/lib/python3.11/contextlib.py\", line 158, in __exit__\n    self.gen.throw(typ, value, traceback)\n  File \"/root/.venv/lib/python3.11/site-packages/httpcore/_exceptions.py\", line 14, in map_exceptions\n    raise to_exc(exc) from exc\nhttpcore.ConnectError: [Errno -2] Name or service not known\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/root/.venv/lib/python3.11/site-packages/openai/_base_client.py\", line 982, in request\n    response = self._client.send(\n               ^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/httpx/_client.py\", line 914, in send\n    response = self._send_handling_auth(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/httpx/_client.py\", line 942, in _send_handling_auth\n    response = self._send_handling_redirects(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/httpx/_client.py\", line 979, in _send_handling_redirects\n    response = self._send_single_request(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/httpx/_client.py\", line 1014, in _send_single_request\n    response = transport.handle_request(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/httpx/_transports/default.py\", line 249, in handle_request\n    with map_httpcore_exceptions():\n  File \"/usr/local/lib/python3.11/contextlib.py\", line 158, in __exit__\n    self.gen.throw(typ, value, traceback)\n  File \"/root/.venv/lib/python3.11/site-packages/httpx/_transports/default.py\", line 118, in map_httpcore_exceptions\n    raise mapped_exc(message) from exc\nhttpx.ConnectError: [Errno -2] Name or service not known\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/llms/providers/openai/completion.py\", line 1585, in _handle_completion\n    response: ChatCompletion = self.client.chat.completions.create(**params)\n                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/openai/_utils/_utils.py\", line 287, in wrapper\n    return func(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/openai/resources/chat/completions/completions.py\", line 1150, in create\n    return self._post(\n           ^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/openai/_base_client.py\", line 1259, in post\n    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/openai/_base_client.py\", line 1014, in request\n    raise APIConnectionError(request=request) from err\nopenai.APIConnectionError: Connection error.\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/app/backend/server.py\", line 73, in process_resume_job\n    agent_output = run_crew(\n                   ^^^^^^^^^\n  File \"/app/crew.py\", line 134, in run_crew\n    final_result = crew.kickoff()\n                   ^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/crew.py\", line 743, in kickoff\n    result = self._run_sequential_process()\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/crew.py\", line 1150, in _run_sequential_process\n    return self._execute_tasks(self.tasks)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/crew.py\", line 1236, in _execute_tasks\n    task_output = task.execute_sync(\n                  ^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/task.py\", line 499, in execute_sync\n    return self._execute_core(agent, context, tools)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/task.py\", line 740, in _execute_core\n    raise e  # Re-raise the exception after emitting the event\n    ^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/task.py\", line 671, in _execute_core\n    result = agent.execute_task(\n             ^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/agent/core.py\", line 493, in execute_task\n    result = self.execute_task(task, context, tools)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/agent/core.py\", line 493, in execute_task\n    result = self.execute_task(task, context, tools)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/agent/core.py\", line 492, in execute_task\n    raise e\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/agent/core.py\", line 459, in execute_task\n    result = self._execute_without_timeout(task_prompt, task)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/agent/core.py\", line 568, in _execute_without_timeout\n    return self.agent_executor.invoke(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/agents/crew_agent_executor.py\", line 207, in invoke\n    formatted_answer = self._invoke_loop()\n                       ^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/agents/crew_agent_executor.py\", line 308, in _invoke_loop\n    return self._invoke_loop_react()\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/agents/crew_agent_executor.py\", line 442, in _invoke_loop_react\n    raise e\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/agents/crew_agent_executor.py\", line 337, in _invoke_loop_react\n    answer = get_llm_response(\n             ^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/utilities/agent_utils.py\", line 372, in get_llm_response\n    raise e\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/utilities/agent_utils.py\", line 362, in get_llm_response\n    answer = llm.call(\n             ^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/llms/providers/openai/completion.py\", line 410, in call\n    return self._call_completions(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/llms/providers/openai/completion.py\", line 450, in _call_completions\n    return self._handle_completion(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/crewai/llms/providers/openai/completion.py\", line 1675, in _handle_completion\n    raise ConnectionError(error_msg) from e\nConnectionError: Failed to connect to OpenAI API: Connection error.\n",
+  "progress": 15,
+  "retry_count": 0,
+  "validation_warnings": [],
+  "logs": [
+    {
+      "timestamp": "2026-02-16T04:42:56.855238+00:00",
+      "event": "job_created",
+      "details": {
+        "status": "queued"
+      }
+    },
+    {
+      "timestamp": "2026-02-16T04:42:56.866451+00:00",
+      "event": "agent_status_update",
+      "details": {
+        "agent_name": "planner",
+        "status": "running",
+        "message": null
+      }
+    },
+    {
+      "timestamp": "2026-02-16T04:43:01.194369+00:00",
+      "event": "job_error",
+      "details": {
+        "error": "Error: Failed to connect to OpenAI API: Connection error.\nTraceback (most recent call last):\n  File \"/root/.venv/lib/python3.11/site-packages/httpx/_transports/default.py\", line 101, in map_httpcore_exceptions\n    yield\n  File \"/root/.venv/lib/python3.11/site-packages/httpx/_transports/default.py\", line 250, in handle_request\n    resp = self._pool.handle_request(req)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.venv/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py\", lin"
+      }
+    }
+  ]
+}
