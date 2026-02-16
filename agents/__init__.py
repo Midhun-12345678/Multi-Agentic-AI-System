@@ -1,6 +1,6 @@
 """
 Agent definitions for the Resume Optimizer.
-All agents configured with the same LLM.
+Configured to use emergentintegrations for LLM access.
 """
 
 import os
@@ -11,12 +11,15 @@ from pathlib import Path
 # Load environment variables
 load_dotenv(Path(__file__).parent.parent / 'backend' / '.env')
 
-# Configure LLM using emergent key
-api_key = os.environ.get('OPENAI_API_KEY') or os.environ.get('EMERGENT_LLM_KEY')
+# Get the emergent key
+api_key = os.environ.get('EMERGENT_LLM_KEY') or os.environ.get('OPENAI_API_KEY')
 
+# Configure LLM using litellm with custom base_url for emergent
+# The emergent key works with a proxy endpoint
 llm = LLM(
-    model="openai/gpt-4o-mini",
+    model="gpt-4o-mini",
     api_key=api_key,
+    base_url="https://ai-gateway.emergent.sh/v1",  # Emergent proxy endpoint
     temperature=0.3
 )
 
