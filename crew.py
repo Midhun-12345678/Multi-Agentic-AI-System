@@ -5,9 +5,7 @@ field mapping enforcement, and automatic retry on data loss.
 """
 
 from crewai import Crew, Task, Agent
-from agents.planner import planner
-from agents.executor import executor
-from agents.critic import critic
+from agents import planner, executor, critic
 from config.template_contexts import get_template_prompt_context, get_json_structure_prompt
 from utils.validation_parser import parse_validation_report
 from utils.job_store import job_store, AgentStatus
