@@ -17,10 +17,14 @@ export function ResultSummary({ result }) {
     template_used,
     pre_pdf_validation = {},
     validation = {},
-    baseline = {}
+    baseline = {},
+    ats_analysis = {}
   } = result;
   
-  const score = pre_pdf_validation.data_integrity_score || 85;
+  // Use ATS score if available, otherwise fall back to data integrity score
+  const atsScore = ats_analysis?.summary?.optimized_score;
+  const atsImprovement = ats_analysis?.summary?.improvement;
+  const score = atsScore || pre_pdf_validation.data_integrity_score || 85;
   const warnings = pre_pdf_validation.warnings || [];
   const fieldMapping = pre_pdf_validation.field_mapping || {};
   
@@ -71,9 +75,14 @@ export function ResultSummary({ result }) {
           {APP_CONFIG.results.scoreLabel}
         </p>
         <div className={`text-7xl font-bold ${getScoreColor(score)}`}>
-          {Math.round(score)}
+          {Math.round(score)}%
         </div>
-        <p className="text-slate-500 mt-2">Data Integrity Score</p>
+        <p className="text-slate-500 mt-2">ATS Keyword Match</p>
+        {atsImprovement > 0 && (
+          <div className="mt-2 inline-flex items-center gap-1 px-3 py-1 bg-emerald-500/20 rounded-full">
+            <span className="text-emerald-400 text-sm font-medium">+{Math.round(atsImprovement)}% improvement</span>
+          </div>
+        )}
       </div>
       
       {/* Field Mapping Status */}

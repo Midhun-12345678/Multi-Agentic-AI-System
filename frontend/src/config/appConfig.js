@@ -44,9 +44,7 @@ export const APP_CONFIG = {
   
   // Templates
   templates: [
-    { value: "professional", label: "Modern Professional" },
-    { value: "harvard", label: "Harvard Business Style" },
-    { value: "classic", label: "Classic Traditional" }
+    { value: "harvard", label: "Harvard Business Style" }
   ],
   
   // Results text

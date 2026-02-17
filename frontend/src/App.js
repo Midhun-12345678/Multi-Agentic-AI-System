@@ -11,7 +11,8 @@ import { AgentTimeline } from './components/resume/AgentTimeline';
 import { LiveConsole } from './components/resume/LiveConsole';
 import { ResumePreview } from './components/resume/ResumePreview';
 import { ResultSummary } from './components/resume/ResultSummary';
-import { useJobWebSocket } from './hooks/useJobWebSocket';
+import { ResumeComparison } from './components/resume/ResumeComparison';
+import { useJobPolling } from './hooks/useJobPolling';
 import { submitOptimization, getJobStatus } from './services/api';
 import APP_CONFIG from './config/appConfig';
 import './App.css';
@@ -29,7 +30,7 @@ function App() {
   const [submitError, setSubmitError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // WebSocket connection for real-time updates
+  // Polling connection for real-time updates
   const {
     status,
     agents,
@@ -39,7 +40,7 @@ function App() {
     isConnected,
     consoleMessages,
     disconnect
-  } = useJobWebSocket(jobId);
+  } = useJobPolling(jobId);
   
   // Handle form submission
   const handleSubmit = useCallback(async (resumeFile, jobDescription, template) => {
@@ -237,6 +238,8 @@ function ProcessingScreen({ agents, progress, consoleMessages, isConnected, erro
  * Results Screen - Final output view
  */
 function ResultsScreen({ result, onReset }) {
+  const [activeTab, setActiveTab] = React.useState('comparison');
+  
   return (
     <div className="min-h-screen p-6">
       <div className="max-w-7xl mx-auto">
@@ -257,24 +260,72 @@ function ResultsScreen({ result, onReset }) {
           </div>
         </div>
         
-        {/* Main content grid */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Left: Result Summary */}
-          <div className="lg:col-span-1 space-y-6">
-            <h2 className="text-lg font-semibold text-white">
-              Results Summary
-            </h2>
-            <ResultSummary result={result} />
-          </div>
-          
-          {/* Right: Resume Preview */}
-          <div className="lg:col-span-2 h-[800px]">
-            <h2 className="text-lg font-semibold text-white mb-4">
-              Optimized Resume Preview
-            </h2>
-            <ResumePreview data={result} />
-          </div>
+        {/* Tab Navigation */}
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setActiveTab('comparison')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'comparison'
+                ? 'bg-violet-500 text-white'
+                : 'bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            Before / After Comparison
+          </button>
+          <button
+            onClick={() => setActiveTab('preview')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'preview'
+                ? 'bg-violet-500 text-white'
+                : 'bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            Resume Preview
+          </button>
         </div>
+        
+        {/* Tab Content */}
+        {activeTab === 'comparison' ? (
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Left: Result Summary */}
+            <div className="lg:col-span-1 space-y-6">
+              <h2 className="text-lg font-semibold text-white">
+                Results Summary
+              </h2>
+              <ResultSummary result={result} />
+            </div>
+            
+            {/* Right: ATS Comparison */}
+            <div className="lg:col-span-2">
+              <h2 className="text-lg font-semibold text-white mb-4">
+                ATS Keyword Analysis
+              </h2>
+              <ResumeComparison 
+                atsAnalysis={result?.ats_analysis}
+                originalResume={result?.original_resume}
+                optimizedResume={result?.optimized_resume}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Left: Result Summary */}
+            <div className="lg:col-span-1 space-y-6">
+              <h2 className="text-lg font-semibold text-white">
+                Results Summary
+              </h2>
+              <ResultSummary result={result} />
+            </div>
+            
+            {/* Right: Resume Preview */}
+            <div className="lg:col-span-2 h-[800px]">
+              <h2 className="text-lg font-semibold text-white mb-4">
+                Optimized Resume Preview
+              </h2>
+              <ResumePreview data={result} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

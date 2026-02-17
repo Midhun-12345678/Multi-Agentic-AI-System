@@ -209,29 +209,61 @@ def extract_projects(text: str) -> List[str]:
 
 
 def extract_skills(text: str) -> List[str]:
-    """Extract skills from text."""
-    skills = []
+    """Extract skills from text using multiple patterns."""
+    skills = set()  # Use set to avoid duplicates
     
-    # Find skills section
-    skills_match = re.search(
-        r'(?:skills?|technologies?|technical skills?|competencies)[:\s]*\n([\s\S]*?)(?=\n\s*(?:education|experience|projects?|$))',
-        text, re.I
-    )
+    # Pattern 1: Find explicit skills section (anywhere in document)
+    skills_patterns = [
+        # Skills section at the end
+        r'(?:skills?|technologies?|technical skills?|competencies|tech stack)[:\s]*\n([\s\S]*?)(?=\n\s*(?:education|experience|projects?|work history|employment|references|$))',
+        # Skills section anywhere with different terminators
+        r'(?:skills?|technologies?|technical skills?|competencies)[:\s]*\n([\s\S]*?)(?=\n\n|\n[A-Z][A-Z])',
+        # Skills on same line after colon
+        r'(?:skills?|technologies?)\s*:\s*([^\n]+)',
+    ]
     
-    if skills_match:
-        skills_section = skills_match.group(1)
-        
-        # Split by common delimiters
-        skill_items = re.split(r'[,|•·\n]', skills_section)
-        
-        for item in skill_items:
-            item = item.strip()
-            # Remove category labels like "Languages:"
-            item = re.sub(r'^[A-Za-z\s]+:', '', item).strip()
-            if item and len(item) < 50 and len(item) > 1:
-                skills.append(item)
+    for pattern in skills_patterns:
+        match = re.search(pattern, text, re.I)
+        if match:
+            skills_section = match.group(1)
+            # Split by common delimiters
+            skill_items = re.split(r'[,|•·\n;/]', skills_section)
+            for item in skill_items:
+                item = item.strip()
+                # Remove category labels like "Languages:", "Tools:"
+                item = re.sub(r'^[A-Za-z\s]{0,20}:', '', item).strip()
+                # Remove bullet points and dashes
+                item = re.sub(r'^[-–—*•]\s*', '', item).strip()
+                if item and 1 < len(item) < 50:
+                    skills.add(item)
     
-    return skills
+    # Pattern 2: Look for known technical skills anywhere in document
+    known_skills = [
+        'Python', 'JavaScript', 'TypeScript', 'Java', 'C\\+\\+', 'C#', 'Ruby', 'Go', 'Rust', 'PHP',
+        'React', 'Angular', 'Vue', 'Node\\.js', 'Django', 'Flask', 'FastAPI', 'Spring',
+        'AWS', 'Azure', 'GCP', 'Docker', 'Kubernetes', 'Terraform',
+        'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Elasticsearch',
+        'Git', 'GitHub', 'GitLab', 'Jenkins', 'CI/CD',
+        'REST API', 'GraphQL', 'Microservices', 'Linux', 'SQL', 'NoSQL',
+        'Machine Learning', 'TensorFlow', 'PyTorch', 'Pandas', 'NumPy',
+        'HTML', 'CSS', 'SASS', 'Tailwind', 'Bootstrap',
+        'Agile', 'Scrum', 'Jira', 'Confluence',
+    ]
+    
+    for skill in known_skills:
+        if re.search(rf'\b{skill}\b', text, re.I):
+            # Normalize the skill name
+            normalized = skill.replace('\\', '').replace('.', '')
+            skills.add(normalized)
+    
+    # Pattern 3: Extract from bullet points anywhere
+    bullet_skills = re.findall(r'[•·\-–—]\s*([A-Z][a-zA-Z0-9+#/.\s]{2,25})(?=[,;•·\-–—\n]|$)', text)
+    for skill in bullet_skills:
+        skill = skill.strip()
+        if skill and 2 < len(skill) < 30:
+            skills.add(skill)
+    
+    return list(skills)
 
 
 def extract_education(text: str) -> Tuple[bool, str]:
@@ -257,6 +289,7 @@ class ValidationResult:
     passed: bool = False
     experience_match: bool = False
     project_match: bool = False
+    skills_match: bool = False
     contact_preserved: bool = False
     issues: List[str] = field(default_factory=list)
     corrective_prompt: str = ""
@@ -300,7 +333,27 @@ def validate_against_baseline(
     else:
         result.project_match = True
     
-    # 3. Validate contact info preserved
+    # 3. Validate skills count (with smart caps for large skill lists)
+    executor_skills = structured_data.get("skills", [])
+    executor_skill_count = len(executor_skills)
+    
+    # For very large skill lists (>30), cap the requirement at 25 core skills
+    # This prevents demanding 80% of 100+ skills which is unrealistic for ATS
+    if baseline.skill_count > 30:
+        min_skills_required = 25  # ATS-optimized cap
+    else:
+        min_skills_required = int(baseline.skill_count * 0.8)  # 80% threshold
+    
+    if executor_skill_count < min_skills_required:
+        issues.append(
+            f"Skills mismatch: Original has {baseline.skill_count} skills, "
+            f"output has {executor_skill_count} (minimum required: {min_skills_required})"
+        )
+        result.skills_match = False
+    else:
+        result.skills_match = True
+    
+    # 4. Validate contact info preserved
     contact_issues = []
     if baseline.email and not structured_data.get("email"):
         contact_issues.append("email")
@@ -315,7 +368,7 @@ def validate_against_baseline(
     else:
         result.contact_preserved = True
     
-    # 4. Check for hallucinated companies
+    # 5. Check for hallucinated companies
     executor_companies = []
     for exp in structured_data.get("experience", []):
         company = exp.get("company", "")
@@ -334,7 +387,7 @@ def validate_against_baseline(
     
     # Determine if passed
     result.issues = issues
-    result.passed = result.experience_match and result.project_match and result.contact_preserved
+    result.passed = result.experience_match and result.project_match and result.skills_match and result.contact_preserved
     
     # Generate corrective prompt if retry needed
     if not result.passed:
@@ -372,6 +425,22 @@ def generate_corrective_prompt(baseline: ResumeBaseline, issues: List[str]) -> s
         )
         if baseline.project_titles:
             prompt_parts.append(f"     Projects to include: {', '.join(baseline.project_titles[:5])}")
+    
+    if baseline.skill_count > 0:
+        if baseline.skill_count > 30:
+            # For large skill lists, guide toward optimization not preservation
+            prompt_parts.append(
+                f"  3. The skills array MUST have AT LEAST 25 skills (prioritize job-relevant ones)"
+            )
+            prompt_parts.append(f"     Original has {baseline.skill_count} skills - condense to top 25-35 most relevant")
+            prompt_parts.append(f"     Group by: Languages | Frameworks | Databases | Cloud | DevOps | Soft Skills")
+        else:
+            min_skills = int(baseline.skill_count * 0.8)
+            prompt_parts.append(
+                f"  3. The skills array MUST have AT LEAST {min_skills} entries (original has {baseline.skill_count})"
+            )
+        if baseline.skills:
+            prompt_parts.append(f"     Sample skills from original: {', '.join(baseline.skills[:10])}")
     
     prompt_parts.extend([
         "",

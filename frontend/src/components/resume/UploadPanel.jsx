@@ -12,7 +12,7 @@ import APP_CONFIG from '../../config/appConfig';
 export function UploadPanel({ onSubmit, isProcessing }) {
   const [resumeFile, setResumeFile] = useState(null);
   const [jobDescription, setJobDescription] = useState('');
-  const [template, setTemplate] = useState('professional');
+  const [template, setTemplate] = useState('harvard');
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
   

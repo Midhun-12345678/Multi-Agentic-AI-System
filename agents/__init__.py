@@ -11,15 +11,13 @@ from pathlib import Path
 # Load environment variables
 load_dotenv(Path(__file__).parent.parent / 'backend' / '.env')
 
-# Get the emergent key
-api_key = os.environ.get('EMERGENT_LLM_KEY') or os.environ.get('OPENAI_API_KEY')
+# Get the API key
+api_key = os.environ.get('OPENAI_API_KEY')
 
-# Configure LLM using emergent proxy endpoint
-# This is the same endpoint that emergentintegrations uses
+# Configure LLM using OpenAI directly
 llm = LLM(
     model="gpt-4o-mini",
     api_key=api_key,
-    base_url="https://integrations.emergentagent.com/llm",
     temperature=0.3
 )
 

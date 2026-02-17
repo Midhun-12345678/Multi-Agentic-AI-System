@@ -5,12 +5,12 @@ field mapping enforcement, and automatic retry on data loss.
 """
 
 from crewai import Crew, Task, Agent
+from crewai.tasks.task_output import TaskOutput
 from agents import planner, executor, critic
 from config.template_contexts import get_template_prompt_context, get_json_structure_prompt
 from utils.validation_parser import parse_validation_report
 from utils.job_store import job_store, AgentStatus
 from utils.field_mapper import extract_baseline, validate_against_baseline, compare_counts
-from utils.websocket_manager import JobEventEmitter
 from typing import Optional, Dict, Callable
 import json
 import re
@@ -28,6 +28,8 @@ def run_crew(
     job_description: str, 
     template: str = "harvard", 
     job_id: Optional[str] = None,
+    page_count: int = 1,
+    ats_keywords: Optional[Dict] = None,
     on_agent_start: Optional[Callable] = None,
     on_agent_message: Optional[Callable] = None,
     on_agent_complete: Optional[Callable] = None,
@@ -41,6 +43,8 @@ def run_crew(
         job_description: Target job description
         template: Resume template to use
         job_id: Job ID for status tracking
+        page_count: Target page count (preserve original length)
+        ats_keywords: Pre-extracted ATS keywords from job description
         on_agent_start: Callback when agent starts
         on_agent_message: Callback for progress messages
         on_agent_complete: Callback when agent completes
@@ -51,11 +55,14 @@ def run_crew(
     """
     
     # Create event emitter for WebSocket updates
-    emitter = JobEventEmitter(job_id) if job_id else None
+    # Event callbacks removed - using job_store only
+    
+    # Track current task for real-time callbacks
+    current_task_index = [0]  # Use list to allow mutation in nested functions
+    task_to_agent = {0: "planner", 1: "executor", 2: "critic"}
+    last_step_time = [0]  # Throttle step messages
     
     def emit_start(agent_name: str):
-        if emitter:
-            emitter.agent_started(agent_name)
         if on_agent_start:
             on_agent_start(agent_name)
         if job_id:
@@ -63,8 +70,6 @@ def run_crew(
         log_agent_event(job_id, agent_name, "started")
     
     def emit_message(agent_name: str, message: str):
-        if emitter:
-            emitter.agent_message(agent_name, message)
         if on_agent_message:
             on_agent_message(agent_name, message)
         if job_id:
@@ -72,8 +77,6 @@ def run_crew(
     
     def emit_complete(agent_name: str, output: str = ""):
         output_size = len(output) if output else 0
-        if emitter:
-            emitter.agent_completed(agent_name, output_size)
         if on_agent_complete:
             on_agent_complete(agent_name, output_size)
         if job_id:
@@ -81,14 +84,13 @@ def run_crew(
         log_agent_event(job_id, agent_name, "completed", {"output_size": output_size})
     
     def emit_warning(warning: str):
-        if emitter:
-            emitter.validation_warning(warning)
         if on_validation_warning:
             on_validation_warning(warning)
         if job_id:
             job_store.add_validation_warning(job_id, warning)
     
     # Extract baseline BEFORE running agents
+    logger.info(f"[{job_id}] Extracting baseline from original resume...")
     emit_message("planner", "Extracting baseline from original resume...")
     baseline = extract_baseline(resume_text)
     
@@ -96,8 +98,10 @@ def run_crew(
                 f"{baseline.project_count} projects")
     
     # Get template-specific context
+    logger.info(f"[{job_id}] Loading template context for: {template}")
     template_context = get_template_prompt_context(template)
     json_structure_prompt = get_json_structure_prompt(template)
+    logger.info(f"[{job_id}] Template context loaded")
     
     # Run crew with retry logic
     retry_count = 0
@@ -105,61 +109,123 @@ def run_crew(
     structured_data = None
     validation_result = None
     
+    logger.info(f"[{job_id}] Starting crew execution loop...")
+    
     while retry_count <= MAX_RETRIES:
+        logger.info(f"[{job_id}] Retry attempt: {retry_count}/{MAX_RETRIES}")
+        
         # Build tasks
+        logger.info(f"[{job_id}] Building crew tasks...")
         plan_task, exec_task, review_task = build_tasks(
             resume_text=resume_text,
             job_description=job_description,
             template=template,
             template_context=template_context,
             json_structure_prompt=json_structure_prompt,
-            corrective_prompt=corrective_prompt
+            corrective_prompt=corrective_prompt,
+            page_count=page_count,
+            ats_keywords=ats_keywords
         )
+        logger.info(f"[{job_id}] Tasks built successfully")
         
+        # === CREWAI CALLBACKS FOR REAL-TIME UPDATES ===
+        def on_task_complete(output: TaskOutput):
+            """Called when each task completes - mark agent complete and start next."""
+            agent_name = task_to_agent.get(current_task_index[0], "unknown")
+            logger.info(f"[{job_id}] Task completed for {agent_name}")
+            
+            # Mark this agent as COMPLETE with output
+            output_str = str(output.raw) if hasattr(output, 'raw') else str(output)
+            emit_complete(agent_name, output_str)
+            
+            # Move to next task
+            current_task_index[0] += 1
+            
+            # Start next agent if not last task
+            next_agent = task_to_agent.get(current_task_index[0])
+            if next_agent:
+                emit_start(next_agent)
+                emit_message(next_agent, f"Starting {next_agent} task...")
+        
+        def on_step(step_output):
+            """Called on each agent step - provides granular progress."""
+            import time
+            current_time = time.time()
+            
+            # Convert to string for filtering
+            step_str = str(step_output) if step_output else ""
+            
+            # Skip AgentFinish messages (too noisy/redundant with task_callback)
+            if "AgentFinish" in step_str:
+                return
+            
+            # Throttle: only emit every 3 seconds to avoid spam
+            if current_time - last_step_time[0] < 3:
+                return
+            last_step_time[0] = current_time
+            
+            agent_name = task_to_agent.get(current_task_index[0], "system")
+            # Extract meaningful info from step_output (truncate)
+            display_str = step_str[:100] if step_str else "Processing..."
+            emit_message(agent_name, f"Thinking: {display_str}...")
+        
+        logger.info(f"[{job_id}] Creating Crew instance with callbacks...")
         crew = Crew(
             agents=[planner, executor, critic],
             tasks=[plan_task, exec_task, review_task],
             process="sequential",
-            verbose=True
+            verbose=True,
+            step_callback=on_step,
+            task_callback=on_task_complete
         )
+        logger.info(f"[{job_id}] Crew instance created with real-time callbacks")
         
-        # === PLANNER PHASE ===
+        # Mark all agents as pending before kickoff
+        if job_id:
+            job_store.update_agent_status(job_id, "planner", AgentStatus.PENDING)
+            job_store.update_agent_status(job_id, "executor", AgentStatus.PENDING)
+            job_store.update_agent_status(job_id, "critic", AgentStatus.PENDING)
+        
+        # Reset task index for this iteration
+        current_task_index[0] = 0
+        
+        # === RUN CREW WITH REAL-TIME CALLBACKS ===
+        logger.info(f"[{job_id}] About to call crew.kickoff()...")
+        
+        # Mark planner as running - callbacks will handle the rest
         emit_start("planner")
         emit_message("planner", "Analyzing resume structure and content...")
-        emit_message("planner", "Identifying gaps vs job requirements...")
-        emit_message("planner", "Building optimization strategy...")
         
-        # Run the crew
+        # Run the crew - callbacks fire during execution
         try:
-            crew.kickoff()  # Execute crew tasks
+            logger.info(f"[{job_id}] ===== CALLING crew.kickoff() =====")
+            crew.kickoff()  # Callbacks fire in real-time during this
+            logger.info(f"[{job_id}] ===== crew.kickoff() COMPLETED =====")
         except Exception as e:
-            logger.error(f"[{job_id}] Crew execution failed: {e}")
+            logger.error(f"[{job_id}] Crew execution failed: {e}", exc_info=True)
             raise
         
-        # Get outputs
+        # === GET OUTPUTS (callbacks already marked agents complete) ===
         planner_output = str(plan_task.output)
-        emit_complete("planner", planner_output)
-        
-        # === EXECUTOR PHASE ===
-        emit_start("executor")
-        emit_message("executor", "Extracting data from original resume...")
-        emit_message("executor", "Applying template formatting...")
-        emit_message("executor", "Enhancing with ATS keywords...")
-        
         executor_output = str(exec_task.output.raw) if hasattr(exec_task.output, 'raw') else str(exec_task.output)
-        emit_complete("executor", executor_output)
         
         # === PARSE JSON ===
         structured_data = parse_executor_json(executor_output)
         
         if not structured_data:
             emit_warning("Failed to parse JSON from executor output")
+            emit_message("executor", f"Retry {retry_count + 1}: JSON parsing failed, retrying...")
             logger.warning(f"[{job_id}] JSON parsing failed, retry {retry_count + 1}")
             retry_count += 1
             corrective_prompt = "⚠️ Your output was not valid JSON. Output ONLY valid JSON starting with { and ending with }"
+            # Reset statuses for retry
+            if job_id:
+                job_store.update_agent_status(job_id, "executor", AgentStatus.PENDING)
+                job_store.update_agent_status(job_id, "critic", AgentStatus.PENDING)
             continue
         
         # === VALIDATE AGAINST BASELINE ===
+        # Note: critic status already set by task_callback, just emit messages
         emit_message("critic", "Validating field mapping...")
         validation_result = validate_against_baseline(baseline, structured_data)
         
@@ -169,12 +235,17 @@ def run_crew(
                 logger.warning(f"[{job_id}] Validation issue: {issue}")
             
             if retry_count < MAX_RETRIES:
+                emit_message("critic", "Data preservation issues detected")
                 emit_message("executor", f"Retry {retry_count + 1}: Correcting data preservation issues...")
                 corrective_prompt = validation_result.corrective_prompt
                 retry_count += 1
                 
                 if job_id:
                     job_store.increment_retry(job_id)
+                    # Reset statuses for retry
+                    job_store.update_agent_status(job_id, "planner", AgentStatus.PENDING)
+                    job_store.update_agent_status(job_id, "executor", AgentStatus.PENDING)
+                    job_store.update_agent_status(job_id, "critic", AgentStatus.PENDING)
                 continue
             else:
                 emit_warning(f"Max retries ({MAX_RETRIES}) reached. Some data may be missing.")
@@ -183,14 +254,8 @@ def run_crew(
         # Validation passed or max retries reached
         break
     
-    # === CRITIC PHASE ===
-    emit_start("critic")
-    emit_message("critic", "Validating JSON structure...")
-    emit_message("critic", "Cross-checking field preservation...")
-    emit_message("critic", "Verifying template compliance...")
-    
+    # === POST-PROCESSING (callbacks already handled agent statuses) ===
     critic_output = str(review_task.output.raw) if hasattr(review_task.output, 'raw') else str(review_task.output)
-    emit_complete("critic", critic_output)
     
     # Parse validation report from critic
     validation_data = parse_validation_report(critic_output)
@@ -232,17 +297,41 @@ def build_tasks(
     template: str,
     template_context: str,
     json_structure_prompt: str,
-    corrective_prompt: str = ""
+    corrective_prompt: str = "",
+    page_count: int = 1,
+    ats_keywords: Optional[Dict] = None
 ) -> tuple:
-    """Build CrewAI tasks with optional corrective prompt for retries."""
+    """Build CrewAI tasks with ATS keywords, page limits, and optional corrective prompt."""
+    
+    # Build ATS keywords section for planner
+    ats_section = ""
+    if ats_keywords:
+        tech_skills = ats_keywords.get("technical_skills", [])
+        soft_skills = ats_keywords.get("soft_skills", [])
+        ats_section = f"""
+        
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        🎯 KEY JOB KEYWORDS TO OPTIMIZE FOR:
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        Technical Skills: {', '.join(tech_skills[:15]) if tech_skills else 'None identified'}
+        Soft Skills: {', '.join(soft_skills[:10]) if soft_skills else 'None identified'}
+        
+        STRATEGY: Identify which keywords are MISSING from the resume and recommend
+        where to naturally incorporate them (without inventing false experience).
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """
     
     plan_task = Task(
         description=f"""
         Analyze the resume and job description.
         Identify gaps, missing keywords, and improvement strategy.
+        {ats_section}
         
         IMPORTANT: The optimized resume will be formatted for the {template.upper()} template.
         Consider this template's style, tone, and structure when making recommendations.
+        
+        📄 PAGE CONSTRAINT: Original resume is {page_count} page(s). Keep recommendations concise
+        to fit within this page limit.
 
         Resume:
         {resume_text}
@@ -250,7 +339,7 @@ def build_tasks(
         Job Description:
         {job_description}
         """,
-        expected_output=f"Structured improvement plan with {template}-specific recommendations",
+        expected_output=f"Structured improvement plan with {template}-specific recommendations and ATS keyword strategy",
         agent=planner
     )
     
@@ -266,11 +355,63 @@ def build_tasks(
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """
     
+    # Build ATS optimization section for executor
+    ats_executor_section = ""
+    if ats_keywords:
+        tech_skills = ats_keywords.get("technical_skills", [])
+        soft_skills = ats_keywords.get("soft_skills", [])
+        missing_hint = f"""
+        
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        🎯 ATS KEYWORD OPTIMIZATION:
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        Job requires these keywords: {', '.join(tech_skills[:12])}
+        Soft skills needed: {', '.join(soft_skills[:8])}
+        
+        OPTIMIZATION RULES:
+        1. Include ALL skills from original resume in the skills array
+        2. If candidate used related tech (e.g., "Flask" and job wants "FastAPI"), 
+           mention BOTH in descriptions where truthful
+        3. Enhance bullet points to naturally include job keywords
+        4. Add soft skills to summary if demonstrated by experience
+        5. DO NOT fabricate experience - only optimize wording
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """
+        ats_executor_section = missing_hint
+    
+    # Page constraint section with strict content limits
+    if page_count == 1:
+        content_limits = "MAX 2 bullets per job, 15-20 skills total, 2-sentence summary"
+    elif page_count == 2:
+        content_limits = "MAX 3 bullets per job, 25-30 skills total, 3-sentence summary"
+    else:
+        # 3+ pages indicates bloated resume - target condensing to 2 pages
+        content_limits = "TARGET 2 PAGES: MAX 3 bullets per job, 25-35 skills, condense aggressively"
+    
+    page_constraint = f"""
+        
+        📄 STRICT PAGE LIMIT: {page_count if page_count <= 2 else 2} page(s) maximum
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        CONTENT LIMITS: {content_limits}
+        
+        ⚠️ EXCEEDING PAGE LIMIT CREATES POOR IMPRESSION ON RECRUITERS
+        
+        CONDENSING RULES:
+        • Each bullet point: 1-2 lines maximum (not 3-4 lines)
+        • Skills: Group by category, remove duplicates, prioritize job-relevant
+        • Projects: 2-3 bullet points each, focus on impact/results
+        • Education: 2-3 lines maximum
+        • Remove generic phrases like "Responsible for..." - use action verbs
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """
+    
     exec_task = Task(
         description=f"""
         ⚠️ CRITICAL: This is a DATA EXTRACTION and FORMATTING task.
         Your source of truth is the ORIGINAL RESUME below. Extract ALL data from it.
         {correction_section}
+        {ats_executor_section}
+        {page_constraint}
         
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         ORIGINAL RESUME (YOUR SOURCE OF TRUTH - PRESERVE ALL DATA FROM THIS):
@@ -293,6 +434,7 @@ def build_tasks(
         • How many distinct projects/portfolio items?
         • What are the EXACT company names as written?
         • What are the EXACT project titles as written?
+        • Extract ALL skills from the original (aim for 80%+ preservation)
         
         STEP 2 - CREATE 1:1 MAPPING (NO CONSOLIDATION):
         • Each job position in original = ONE entry in experience array

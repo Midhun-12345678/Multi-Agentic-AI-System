@@ -1,9 +1,9 @@
 """
 AI Resume Optimizer - FastAPI Backend
-With WebSocket real-time updates and file-based job persistence.
+With polling-based job status updates and file-based job persistence.
 """
 
-from fastapi import FastAPI, UploadFile, Form, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -12,7 +12,7 @@ import uuid
 import traceback
 import logging
 import os
-import asyncio
+import concurrent.futures
 from typing import Optional
 from dotenv import load_dotenv
 from pathlib import Path
@@ -29,8 +29,11 @@ from services.template_renderer import render_html
 from services.pdf_service import html_to_pdf_base64
 from utils.job_store import job_store, JobStatus, AgentStatus
 from utils.pre_pdf_validator import validate_resume_data
-from utils.websocket_manager import ws_manager, JobEventEmitter
+from utils.ats_scorer import analyze_ats_improvement, extract_keywords_from_job_description
 from schemas.resume_schema import ResumeSchema, Experience, Project
+
+# Thread pool for background tasks (runs in separate threads, not event loop)
+thread_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
 # Configure logging
 logging.basicConfig(
@@ -56,45 +59,63 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down AI Resume Optimizer API...")
+    thread_executor.shutdown(wait=False)
 
 
 app = FastAPI(
     title="AI Resume Optimizer",
-    description="Multi-agent resume optimization with real-time WebSocket updates",
-    version="2.0.0",
+    description="Multi-agent resume optimization with polling-based status updates",
+    version="2.1.0",
     lifespan=lifespan
 )
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000", 
+        "http://127.0.0.1:3000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-def process_resume_job(job_id: str, resume_text: str, job_description: str, template: str):
+def process_resume_job(job_id: str, resume_text: str, job_description: str, template: str, page_count: int = 1, ats_keywords: dict = None):
     """
     Background task to process resume optimization.
-    Sends real-time updates via WebSocket.
+    Includes ATS keywords and page count for optimization.
     """
-    emitter = JobEventEmitter(job_id)
+    import threading
+    import sys
+    
+    # Force immediate output
+    print(f"[{job_id}] ===== BACKGROUND TASK STARTED (PRINT) =====", flush=True)
+    logger.info(f"[{job_id}] ===== BACKGROUND TASK STARTED =====")
+    logger.info(f"[{job_id}] Process ID: {os.getpid()}, Thread: {threading.current_thread().name}")
+    sys.stdout.flush()
+    sys.stderr.flush()
     
     try:
-        logger.info(f"[{job_id}] Starting resume optimization")
-        emitter.progress(5, "Starting optimization...")
+        print(f"[{job_id}] ===== Starting resume optimization (PRINT) =====", flush=True)
+        logger.info(f"[{job_id}] ===== Starting resume optimization =====")
+        
+        logger.info(f"[{job_id}] About to call run_crew()")
+        logger.info(f"[{job_id}] Resume length: {len(resume_text)}, Job desc length: {len(job_description)}, Template: {template}")
+        logger.info(f"[{job_id}] Page count: {page_count}, ATS keywords: {len(ats_keywords.get('all_keywords', {})) if ats_keywords else 0}")
         
         # Run the crew with callbacks
         agent_output = run_crew(
             resume_text=resume_text,
             job_description=job_description,
             template=template,
-            job_id=job_id
+            job_id=job_id,
+            page_count=page_count,
+            ats_keywords=ats_keywords
         )
         
-        emitter.progress(80, "Generating PDF...")
+        logger.info(f"[{job_id}] run_crew() completed successfully")
         
         # Process the result
         if "structured_data" in agent_output and agent_output["structured_data"]:
@@ -142,15 +163,46 @@ def process_resume_job(job_id: str, resume_text: str, job_description: str, temp
         # Check for validation warnings
         if pre_pdf_validation.get("warnings"):
             for warning in pre_pdf_validation["warnings"]:
-                emitter.validation_warning(warning)
+                job_store.add_validation_warning(job_id, warning)
         
-        emitter.progress(90, "Rendering resume template...")
+        logger.info(f"[{job_id}] Rendering resume template...")
         
         # Generate PDF
         html_content = render_html(resume_data, template)
         pdf_base64 = html_to_pdf_base64(html_content)
         
-        emitter.progress(95, "Finalizing...")
+        # Post-generation page count validation
+        try:
+            import io
+            import base64
+            from PyPDF2 import PdfReader
+            pdf_bytes = base64.b64decode(pdf_base64)
+            pdf_reader = PdfReader(io.BytesIO(pdf_bytes))
+            output_pages = len(pdf_reader.pages)
+            target_pages = min(page_count, 2)  # Cap target at 2 pages
+            
+            if output_pages > target_pages:
+                page_warning = f"Page bloat: Generated {output_pages} pages vs {target_pages} target. Consider condensing."
+                job_store.add_validation_warning(job_id, page_warning)
+                logger.warning(f"[{job_id}] {page_warning}")
+            else:
+                logger.info(f"[{job_id}] Page count OK: {output_pages}/{target_pages} pages")
+        except Exception as e:
+            logger.warning(f"[{job_id}] Could not validate page count: {e}")
+        
+        # Generate optimized resume text for ATS comparison
+        optimized_resume_text = agent_output.get("executor", "")
+        
+        # ATS Analysis - compare original vs optimized
+        logger.info(f"[{job_id}] Running ATS keyword analysis...")
+        ats_analysis = analyze_ats_improvement(
+            original_resume=resume_text,
+            optimized_resume=optimized_resume_text,
+            job_description=job_description
+        )
+        logger.info(f"[{job_id}] ATS Score: {ats_analysis['summary']['original_score']} -> {ats_analysis['summary']['optimized_score']} (+{ats_analysis['summary']['improvement']}%)")
+        
+        logger.info(f"[{job_id}] Finalizing...")
         
         # Build final result
         result = {
@@ -162,15 +214,14 @@ def process_resume_job(job_id: str, resume_text: str, job_description: str, temp
             "validation": agent_output.get("validation", {}),
             "pre_pdf_validation": pre_pdf_validation,
             "retry_count": agent_output.get("retry_count", 0),
-            "baseline": agent_output.get("baseline", {})
+            "baseline": agent_output.get("baseline", {}),
+            "ats_analysis": ats_analysis,
+            "original_resume": resume_text,
+            "optimized_resume": optimized_resume_text
         }
         
         # Complete the job
         job_store.complete_job(job_id, result)
-        
-        # Send WebSocket completion event
-        emitter.job_completed(result)
-        emitter.progress(100, "Complete!")
         
         logger.info(f"[{job_id}] Resume optimization completed successfully")
         
@@ -179,7 +230,6 @@ def process_resume_job(job_id: str, resume_text: str, job_description: str, temp
         logger.error(f"[{job_id}] {error_msg}")
         
         job_store.error_job(job_id, error_msg)
-        emitter.job_failed(str(e))
 
 
 @app.get("/api/")
@@ -188,13 +238,12 @@ async def root():
     return {
         "status": "healthy",
         "service": "AI Resume Optimizer",
-        "version": "2.0.0"
+        "version": "2.1.0"
     }
 
 
 @app.post("/api/optimize-resume")
 async def optimize_resume(
-    background_tasks: BackgroundTasks,
     resume: UploadFile,
     job_description: str = Form(...),
     template: str = Form("professional")
@@ -202,19 +251,24 @@ async def optimize_resume(
     """
     Submit resume optimization job.
     Returns job_id immediately, process runs in background.
-    Connect to WebSocket for real-time updates.
+    Poll /api/status/{job_id} for updates.
     """
     # Generate unique job ID
     job_id = str(uuid.uuid4())
     
     # Read resume
     try:
-        resume_text = read_resume(resume)
+        resume_text, page_count = read_resume(resume)
+        logger.info(f"[New Job] Resume extracted: {len(resume_text)} chars, {page_count} page(s)")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to read resume: {str(e)}")
     
     if not resume_text.strip():
         raise HTTPException(status_code=400, detail="Resume appears to be empty")
+    
+    # Extract ATS keywords from job description BEFORE crew runs
+    ats_keywords = extract_keywords_from_job_description(job_description)
+    logger.info(f"[New Job] Extracted {len(ats_keywords.get('technical_skills', []))} technical skills, {len(ats_keywords.get('soft_skills', []))} soft skills")
     
     # Create job in persistent store
     job_store.create_job(
@@ -226,20 +280,23 @@ async def optimize_resume(
     
     logger.info(f"[{job_id}] Created new optimization job")
     
-    # Start background processing
-    background_tasks.add_task(
+    # Start background processing in a SEPARATE THREAD (not the event loop)
+    logger.info(f"[{job_id}] Submitting to thread pool executor...")
+    thread_executor.submit(
         process_resume_job,
-        job_id=job_id,
-        resume_text=resume_text,
-        job_description=job_description,
-        template=template
+        job_id,
+        resume_text,
+        job_description,
+        template,
+        page_count,
+        ats_keywords
     )
+    logger.info(f"[{job_id}] Background task submitted successfully")
     
     return {
         "job_id": job_id,
         "status": "queued",
-        "message": "Resume optimization started. Connect to WebSocket for real-time updates.",
-        "websocket_url": f"/api/ws/{job_id}"
+        "message": "Resume optimization started. Poll /api/status/{job_id} for updates."
     }
 
 
@@ -248,6 +305,7 @@ async def get_job_status(job_id: str):
     """
     Get current status of a resume optimization job.
     Supports both polling and WebSocket approaches.
+    Poll this endpoint until status is 'complete' or 'error'.
     """
     job_status = job_store.get_job_status(job_id)
     
@@ -262,70 +320,6 @@ async def list_jobs(status: Optional[str] = None, limit: int = 50):
     """List all jobs, optionally filtered by status."""
     jobs = job_store.list_jobs(status=status, limit=limit)
     return {"jobs": jobs, "count": len(jobs)}
-
-
-@app.websocket("/api/ws/{job_id}")
-async def websocket_endpoint(websocket: WebSocket, job_id: str):
-    """
-    WebSocket endpoint for real-time job updates.
-    
-    Events pushed to client:
-    - connected: Connection established
-    - agent_started: Agent began processing
-    - agent_message: Progress message from agent
-    - agent_completed: Agent finished
-    - validation_warning: Data validation issue
-    - job_completed: Job finished successfully (includes results)
-    - job_failed: Job failed with error
-    - job_progress: Overall progress update
-    """
-    # Check if job exists
-    job_data = job_store.get_job(job_id)
-    if not job_data:
-        await websocket.close(code=4004, reason="Job not found")
-        return
-    
-    # Accept connection
-    connected = await ws_manager.connect(websocket, job_id)
-    if not connected:
-        return
-    
-    try:
-        # Send current status immediately
-        status = job_store.get_job_status(job_id)
-        if status:
-            await websocket.send_json({
-                "type": "initial_status",
-                "data": status
-            })
-        
-        # Keep connection alive and handle client messages
-        while True:
-            try:
-                # Wait for client messages (ping/pong or close)
-                data = await asyncio.wait_for(
-                    websocket.receive_text(),
-                    timeout=30.0  # 30 second timeout
-                )
-                
-                # Handle ping
-                if data == "ping":
-                    await websocket.send_text("pong")
-                
-            except asyncio.TimeoutError:
-                # Send ping to keep connection alive
-                try:
-                    await websocket.send_text("ping")
-                except:
-                    break
-                    
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for job {job_id}")
-    except Exception as e:
-        logger.error(f"WebSocket error for job {job_id}: {e}")
-    finally:
-        await ws_manager.disconnect(websocket)
-
 
 @app.delete("/api/jobs/{job_id}")
 async def delete_job(job_id: str):
@@ -358,5 +352,5 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=8001,
-        reload=True
+        reload=False  # Disabled for ThreadPoolExecutor stability
     )
