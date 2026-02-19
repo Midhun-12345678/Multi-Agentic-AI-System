@@ -106,7 +106,7 @@ def extract_github(text: str) -> str:
 def extract_name(text: str) -> str:
     """Extract name from text (usually first non-empty line)."""
     lines = text.strip().split('\n')
-    for line in lines[:5]:
+    for line in lines[:10]:  # Search first 10 lines for resumes with headers/logos
         line = line.strip()
         if line and len(line) < 50:
             # Skip if it looks like contact info
@@ -152,13 +152,13 @@ def extract_companies(text: str) -> List[str]:
                     company_words.append(word)
             
             if company_words:
-                potential_company = ' '.join(company_words[:4])  # Limit to 4 words
+                potential_company = ' '.join(company_words[:8])  # Allow longer company names
             
             # Check previous line if current doesn't have company
             if not potential_company and i > 0:
                 prev_line = lines[i-1].strip()
                 if prev_line and not re.search(date_pattern, prev_line, re.I):
-                    potential_company = prev_line[:50]
+                    potential_company = prev_line[:80]  # Allow longer names from prev line
             
             if potential_company and potential_company not in companies:
                 companies.append(potential_company)
@@ -205,7 +205,7 @@ def extract_projects(text: str) -> List[str]:
                 if clean_line not in projects:
                     projects.append(clean_line)
     
-    return projects[:10]  # Limit to 10 projects
+    return projects  # Return all projects, no artificial limit
 
 
 def extract_skills(text: str) -> List[str]:
@@ -337,12 +337,14 @@ def validate_against_baseline(
     executor_skills = structured_data.get("skills", [])
     executor_skill_count = len(executor_skills)
     
-    # For very large skill lists (>30), cap the requirement at 25 core skills
-    # This prevents demanding 80% of 100+ skills which is unrealistic for ATS
-    if baseline.skill_count > 30:
-        min_skills_required = 25  # ATS-optimized cap
+    # For very large skill lists (>40), cap the requirement at 30 core skills
+    # This prevents demanding 90% of 100+ skills which is unrealistic for ATS
+    if baseline.skill_count > 40:
+        min_skills_required = 30  # ATS-optimized cap for very large lists
+    elif baseline.skill_count > 25:
+        min_skills_required = int(baseline.skill_count * 0.85)  # 85% for medium lists
     else:
-        min_skills_required = int(baseline.skill_count * 0.8)  # 80% threshold
+        min_skills_required = int(baseline.skill_count * 0.90)  # 90% threshold for normal lists
     
     if executor_skill_count < min_skills_required:
         issues.append(
@@ -417,30 +419,34 @@ def generate_corrective_prompt(baseline: ResumeBaseline, issues: List[str]) -> s
             f"  1. The experience array MUST have EXACTLY {baseline.experience_count} entries"
         )
         if baseline.companies:
-            prompt_parts.append(f"     Companies to include: {', '.join(baseline.companies[:5])}")
+            prompt_parts.append(f"     Companies to include: {', '.join(baseline.companies)}")  # ALL companies
     
     if baseline.project_count > 0:
         prompt_parts.append(
             f"  2. The projects array MUST have EXACTLY {baseline.project_count} entries"
         )
         if baseline.project_titles:
-            prompt_parts.append(f"     Projects to include: {', '.join(baseline.project_titles[:5])}")
+            prompt_parts.append(f"     Projects to include: {', '.join(baseline.project_titles)}")  # ALL projects
     
     if baseline.skill_count > 0:
-        if baseline.skill_count > 30:
+        if baseline.skill_count > 40:
             # For large skill lists, guide toward optimization not preservation
             prompt_parts.append(
-                f"  3. The skills array MUST have AT LEAST 25 skills (prioritize job-relevant ones)"
+                f"  3. The skills array MUST have AT LEAST 30 skills (prioritize job-relevant ones)"
             )
-            prompt_parts.append(f"     Original has {baseline.skill_count} skills - condense to top 25-35 most relevant")
+            prompt_parts.append(f"     Original has {baseline.skill_count} skills - condense to top 30-40 most relevant")
             prompt_parts.append(f"     Group by: Languages | Frameworks | Databases | Cloud | DevOps | Soft Skills")
         else:
-            min_skills = int(baseline.skill_count * 0.8)
+            min_skills = int(baseline.skill_count * 0.90)  # 90% threshold
             prompt_parts.append(
                 f"  3. The skills array MUST have AT LEAST {min_skills} entries (original has {baseline.skill_count})"
             )
         if baseline.skills:
-            prompt_parts.append(f"     Sample skills from original: {', '.join(baseline.skills[:10])}")
+            # Show all skills up to 30, or summarize if more
+            if len(baseline.skills) <= 30:
+                prompt_parts.append(f"     Skills from original: {', '.join(baseline.skills)}")
+            else:
+                prompt_parts.append(f"     Sample skills from original: {', '.join(baseline.skills[:30])}...")
     
     prompt_parts.extend([
         "",
@@ -479,7 +485,7 @@ def compare_counts(baseline: ResumeBaseline, structured_data: Dict) -> Dict:
         "skills": {
             "original": baseline.skill_count,
             "output": len(executor_skills),
-            "match": len(executor_skills) >= baseline.skill_count * 0.5  # Allow some flexibility
+            "match": len(executor_skills) >= baseline.skill_count * 0.8  # 80% minimum threshold
         },
         "contact": {
             "email": bool(structured_data.get("email")) if baseline.email else True,

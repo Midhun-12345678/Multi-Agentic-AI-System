@@ -131,6 +131,9 @@ def process_resume_job(job_id: str, resume_text: str, job_description: str, temp
                     experience_list.append(Experience(
                         role=exp.get("role", ""),
                         company=exp.get("company", ""),
+                        start_date=exp.get("start_date", ""),
+                        end_date=exp.get("end_date", ""),
+                        location=exp.get("location", ""),
                         description=exp.get("description", "")
                     ))
             
@@ -140,6 +143,7 @@ def process_resume_job(job_id: str, resume_text: str, job_description: str, temp
                 if isinstance(proj, dict):
                     projects_list.append(Project(
                         title=proj.get("title", ""),
+                        tech_stack=proj.get("tech_stack", ""),
                         details=proj.get("details", "")
                     ))
             
@@ -153,7 +157,10 @@ def process_resume_job(job_id: str, resume_text: str, job_description: str, temp
                 education=json_data.get("education", ""),
                 experience=experience_list,
                 projects=projects_list,
-                skills=json_data.get("skills", [])
+                skills=json_data.get("skills", []),
+                certifications=json_data.get("certifications", []),
+                awards=json_data.get("awards", []),
+                languages=json_data.get("languages", [])
             )
         else:
             logger.warning(f"[{job_id}] Falling back to markdown parsing")

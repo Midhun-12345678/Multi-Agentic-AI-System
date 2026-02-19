@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 # Maximum retries for field mapping failures
-MAX_RETRIES = 2
+MAX_RETRIES = 4
 
 
 def run_crew(
@@ -313,8 +313,8 @@ def build_tasks(
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         🎯 KEY JOB KEYWORDS TO OPTIMIZE FOR:
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        Technical Skills: {', '.join(tech_skills[:15]) if tech_skills else 'None identified'}
-        Soft Skills: {', '.join(soft_skills[:10]) if soft_skills else 'None identified'}
+        Technical Skills: {', '.join(tech_skills) if tech_skills else 'None identified'}
+        Soft Skills: {', '.join(soft_skills) if soft_skills else 'None identified'}
         
         STRATEGY: Identify which keywords are MISSING from the resume and recommend
         where to naturally incorporate them (without inventing false experience).
@@ -365,8 +365,8 @@ def build_tasks(
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         🎯 ATS KEYWORD OPTIMIZATION:
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        Job requires these keywords: {', '.join(tech_skills[:12])}
-        Soft skills needed: {', '.join(soft_skills[:8])}
+        Job requires these keywords: {', '.join(tech_skills)}
+        Soft skills needed: {', '.join(soft_skills)}
         
         OPTIMIZATION RULES:
         1. Include ALL skills from original resume in the skills array
@@ -375,33 +375,38 @@ def build_tasks(
         3. Enhance bullet points to naturally include job keywords
         4. Add soft skills to summary if demonstrated by experience
         5. DO NOT fabricate experience - only optimize wording
+        6. PRESERVE all certifications, awards, and education details
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """
         ats_executor_section = missing_hint
     
-    # Page constraint section with strict content limits
-    if page_count == 1:
-        content_limits = "MAX 2 bullets per job, 15-20 skills total, 2-sentence summary"
-    elif page_count == 2:
-        content_limits = "MAX 3 bullets per job, 25-30 skills total, 3-sentence summary"
-    else:
-        # 3+ pages indicates bloated resume - target condensing to 2 pages
-        content_limits = "TARGET 2 PAGES: MAX 3 bullets per job, 25-35 skills, condense aggressively"
+    # Smart page constraint - preserve data, optimize density
+    target_pages = min(page_count, 2)  # Never exceed 2 pages
     
     page_constraint = f"""
         
-        📄 STRICT PAGE LIMIT: {page_count if page_count <= 2 else 2} page(s) maximum
+        📄 TARGET: {target_pages} page(s) - Match original resume density
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        CONTENT LIMITS: {content_limits}
         
-        ⚠️ EXCEEDING PAGE LIMIT CREATES POOR IMPRESSION ON RECRUITERS
+         PRESERVATION RULES (CRITICAL - DO NOT VIOLATE):
+        • Keep ALL bullet points from original - make each concise (1-2 lines) but keep them all
+        • Keep ALL skills from original - group by category if needed for space
+        • Keep ALL certifications, awards, education details with dates
+        • Keep ALL company names with EXACT employment dates (e.g., "Jan 2023 - Present")
+        • Keep ALL project titles with tech stacks
         
-        CONDENSING RULES:
-        • Each bullet point: 1-2 lines maximum (not 3-4 lines)
-        • Skills: Group by category, remove duplicates, prioritize job-relevant
-        • Projects: 2-3 bullet points each, focus on impact/results
-        • Education: 2-3 lines maximum
-        • Remove generic phrases like "Responsible for..." - use action verbs
+         ALLOWED OPTIMIZATIONS:
+        • Reword bullets with action verbs (Led, Built, Designed vs "Was responsible for")
+        • Merge ONLY genuinely duplicate/redundant bullets within same job
+        • Use consistent date format: "MMM YYYY - MMM YYYY" or "MMM YYYY - Present"
+        • Group skills by category: Languages | Frameworks | Databases | Cloud | Tools
+        
+        ❌ DO NOT:
+        • Drop bullet points to save space
+        • Remove skills not mentioned in job description
+        • Delete certifications or awards
+        • Shorten or abbreviate company names
+        • Remove dates from any entry
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """
     

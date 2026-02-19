@@ -121,7 +121,7 @@ def validate_resume_data(original_text: str, structured_data: ResumeSchema) -> D
         "match": final_skills_count >= original_skills_count  # Allow adding skills
     }
     
-    if final_skills_count < original_skills_count * 0.5:  # Lost more than 50% of skills
+    if final_skills_count < original_skills_count * 0.8:  # Lost more than 20% of skills
         validation_result["warnings"].append(
             f"Skills mismatch: {original_skills_count} skills in original, only {final_skills_count} mapped"
         )
