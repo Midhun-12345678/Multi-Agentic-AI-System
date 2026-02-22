@@ -1,14 +1,16 @@
 /**
  * Result Summary Component
  * Shows ATS score, issues, and download button
+ * Enhanced with validation warnings display
  */
 import React, { useState } from 'react';
-import { Download, AlertTriangle, CheckCircle, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { Download, AlertTriangle, CheckCircle, Info, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import APP_CONFIG from '../../config/appConfig';
 
 export function ResultSummary({ result }) {
   const [showSkillsNote, setShowSkillsNote] = useState(false);
+  const [showValidationNotes, setShowValidationNotes] = useState(false);
   
   if (!result) return null;
   
@@ -18,7 +20,8 @@ export function ResultSummary({ result }) {
     pre_pdf_validation = {},
     validation = {},
     baseline = {},
-    ats_analysis = {}
+    ats_analysis = {},
+    validation_warnings = [] // Validation warnings from processing
   } = result;
   
   // Use ATS score if available, otherwise fall back to data integrity score
@@ -27,6 +30,14 @@ export function ResultSummary({ result }) {
   const score = atsScore || pre_pdf_validation.data_integrity_score || 85;
   const warnings = pre_pdf_validation.warnings || [];
   const fieldMapping = pre_pdf_validation.field_mapping || {};
+  
+  // Separate critical warnings from informational notes
+  const criticalWarnings = validation_warnings.filter(w => 
+    w.includes('[CRITICAL]') || w.includes('Missing email') || w.includes('Missing phone')
+  );
+  const infoWarnings = validation_warnings.filter(w => 
+    w.includes('[WARNING]') || w.includes('mismatch') || w.includes('below threshold')
+  ).filter(w => !criticalWarnings.includes(w));
   
   const handleDownload = () => {
     if (!pdf_base64) return;
@@ -101,25 +112,63 @@ export function ResultSummary({ result }) {
         />
       </div>
       
-      {/* Warnings */}
-      {warnings.length > 0 && (
-        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
-          <h4 className="flex items-center gap-2 font-medium text-amber-400 mb-2">
-            <AlertTriangle className="w-4 h-4" />
+      {/* Critical Warnings */}
+      {(warnings.length > 0 || criticalWarnings.length > 0) && (
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+          <h4 className="flex items-center gap-2 font-medium text-red-400 mb-2">
+            <AlertCircle className="w-4 h-4" />
             {APP_CONFIG.results.criticalIssuesLabel}
           </h4>
           <ul className="space-y-1">
             {warnings.map((warning, idx) => (
-              <li key={idx} className="text-sm text-amber-300/80">
+              <li key={`w-${idx}`} className="text-sm text-red-300/80">
                 • {warning}
+              </li>
+            ))}
+            {criticalWarnings.map((warning, idx) => (
+              <li key={`cw-${idx}`} className="text-sm text-red-300/80">
+                • {warning.replace('[CRITICAL] ', '')}
               </li>
             ))}
           </ul>
         </div>
       )}
       
+      {/* Validation Notes (non-critical) - Collapsible */}
+      {infoWarnings.length > 0 && (
+        <>
+          <button 
+            onClick={() => setShowValidationNotes(!showValidationNotes)}
+            className="w-full p-3 rounded-lg bg-amber-500/10 border border-amber-500/30
+                       flex items-center justify-between text-sm text-amber-400
+                       hover:bg-amber-500/15 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              Validation Notes ({infoWarnings.length})
+            </span>
+            {showValidationNotes ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+          
+          {showValidationNotes && (
+            <div className="p-4 rounded-lg bg-amber-500/5 border border-amber-500/20">
+              <p className="text-xs text-slate-500 mb-2">
+                Minor adjustments made during optimization (data integrity preserved)
+              </p>
+              <ul className="space-y-1">
+                {infoWarnings.map((warning, idx) => (
+                  <li key={idx} className="text-sm text-amber-300/70">
+                    • {warning.replace('[WARNING] ', '')}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
+      )}
+      
       {/* Success Message */}
-      {warnings.length === 0 && (
+      {warnings.length === 0 && criticalWarnings.length === 0 && (
         <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
           <h4 className="flex items-center gap-2 font-medium text-emerald-400">
             <CheckCircle className="w-4 h-4" />
