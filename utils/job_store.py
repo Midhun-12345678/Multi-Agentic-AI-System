@@ -155,7 +155,27 @@ class FileJobStore:
         self._save(job_id, job)
         return job
     
-    def add_agent_message(self, job_id: str, agent_name: str, message: str) -> Optional[Dict]:
+    def add_agent_message(
+        self, 
+        job_id: str, 
+        agent_name: str, 
+        message: str,
+        msg_type: str = "info",
+        severity: str = None,
+        retry_attempt: int = None,
+        validation_details: Dict = None
+    ) -> Optional[Dict]:
+        """Add a message to an agent's message log with optional metadata.
+        
+        Args:
+            job_id: The job ID
+            agent_name: The agent name (planner, executor, critic)
+            message: The message text
+            msg_type: Message type - "info", "warning", "error", "progress", "retry"
+            severity: Validation severity - "critical", "warning", "info"
+            retry_attempt: Current retry attempt number if applicable
+            validation_details: Dict with validation context (field, expected, actual)
+        """
         job = self._cache.get(job_id)
         if not job:
             return None
@@ -163,7 +183,21 @@ class FileJobStore:
         now = datetime.now(timezone.utc).isoformat()
         agent = job["agents"].get(agent_name)
         if agent:
-            agent["messages"].append({"timestamp": now, "message": message})
+            msg_data = {
+                "timestamp": now,
+                "message": message,
+                "type": msg_type
+            }
+            
+            # Add optional fields only if provided
+            if severity:
+                msg_data["severity"] = severity
+            if retry_attempt is not None:
+                msg_data["retry_attempt"] = retry_attempt
+            if validation_details:
+                msg_data["validation_details"] = validation_details
+            
+            agent["messages"].append(msg_data)
             job["updated_at"] = now
             self._save(job_id, job)
         return job

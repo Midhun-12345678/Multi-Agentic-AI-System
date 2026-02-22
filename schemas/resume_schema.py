@@ -14,6 +14,12 @@ class Project(BaseModel):
     tech_stack: Optional[str] = ""
     details: str
 
+class Education(BaseModel):
+    degree: str
+    institution: str
+    year: Optional[str] = ""
+    details: Optional[str] = ""
+
 class ResumeSchema(BaseModel):
     name: str
     email: str = ""
@@ -25,7 +31,7 @@ class ResumeSchema(BaseModel):
     skills: List[str] = []
     experience: List[Experience] = []
     projects: List[Project] = []
-    education: str = ""
+    education: List[Education] = []
     certifications: List[str] = []
     awards: List[str] = []
     languages: List[str] = []

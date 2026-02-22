@@ -72,7 +72,7 @@ def validate_resume_data(original_text: str, structured_data: ResumeSchema) -> D
             validation_result["warnings"].append("GitHub URL found in original but not mapped (minor)")
     
     # 6. Check education
-    if structured_data.education and len(structured_data.education.strip()) > 10:
+    if structured_data.education and len(structured_data.education) > 0:
         validation_result["field_mapping"]["education"] = True
     else:
         # Check if education section exists in original

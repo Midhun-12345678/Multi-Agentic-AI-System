@@ -19,8 +19,8 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-# Maximum retries for field mapping failures
-MAX_RETRIES = 4
+# Maximum retries for field mapping failures (reduced from 4 to minimize latency)
+MAX_RETRIES = 2
 
 
 def run_crew(
@@ -69,11 +69,27 @@ def run_crew(
             job_store.update_agent_status(job_id, agent_name, AgentStatus.RUNNING)
         log_agent_event(job_id, agent_name, "started")
     
-    def emit_message(agent_name: str, message: str):
+    def emit_message(
+        agent_name: str, 
+        message: str, 
+        msg_type: str = "info",
+        severity: str = None,
+        retry_attempt: int = None,
+        validation_details: dict = None
+    ):
+        """Emit a message with optional metadata for dynamic UI display."""
         if on_agent_message:
             on_agent_message(agent_name, message)
         if job_id:
-            job_store.add_agent_message(job_id, agent_name, message)
+            job_store.add_agent_message(
+                job_id, 
+                agent_name, 
+                message,
+                msg_type=msg_type,
+                severity=severity,
+                retry_attempt=retry_attempt,
+                validation_details=validation_details
+            )
     
     def emit_complete(agent_name: str, output: str = ""):
         output_size = len(output) if output else 0
@@ -83,7 +99,8 @@ def run_crew(
             job_store.update_agent_status(job_id, agent_name, AgentStatus.COMPLETE, output)
         log_agent_event(job_id, agent_name, "completed", {"output_size": output_size})
     
-    def emit_warning(warning: str):
+    def emit_warning(warning: str, severity: str = "warning"):
+        """Emit a validation warning with severity level."""
         if on_validation_warning:
             on_validation_warning(warning)
         if job_id:
@@ -108,6 +125,10 @@ def run_crew(
     corrective_prompt = ""
     structured_data = None
     validation_result = None
+    
+    # Cache planner output to avoid re-running on retries (saves ~1 LLM call per retry)
+    cached_planner_output = None
+    cached_plan_task = None
     
     logger.info(f"[{job_id}] Starting crew execution loop...")
     
@@ -180,21 +201,30 @@ def run_crew(
         )
         logger.info(f"[{job_id}] Crew instance created with real-time callbacks")
         
-        # Mark all agents as pending before kickoff
+        # Mark agents as pending before kickoff
+        # On retries (when planner is cached), only reset executor/critic
         if job_id:
-            job_store.update_agent_status(job_id, "planner", AgentStatus.PENDING)
+            if cached_planner_output is None:
+                # First run - all agents start fresh
+                job_store.update_agent_status(job_id, "planner", AgentStatus.PENDING)
+            # executor and critic always reset (already done in retry block, but ensure clean state)
             job_store.update_agent_status(job_id, "executor", AgentStatus.PENDING)
             job_store.update_agent_status(job_id, "critic", AgentStatus.PENDING)
         
         # Reset task index for this iteration
-        current_task_index[0] = 0
+        current_task_index[0] = 0 if cached_planner_output is None else 1  # Skip planner on retry
         
         # === RUN CREW WITH REAL-TIME CALLBACKS ===
         logger.info(f"[{job_id}] About to call crew.kickoff()...")
         
-        # Mark planner as running - callbacks will handle the rest
-        emit_start("planner")
-        emit_message("planner", "Analyzing resume structure and content...")
+        # Mark starting agent as running - skip planner if cached
+        if cached_planner_output is None:
+            emit_start("planner")
+            emit_message("planner", "Analyzing resume structure and content...")
+        else:
+            logger.info(f"[{job_id}] Using cached planner output, starting with executor")
+            emit_start("executor")
+            emit_message("executor", "Using cached analysis from previous attempt...")
         
         # Run the crew - callbacks fire during execution
         try:
@@ -206,15 +236,26 @@ def run_crew(
             raise
         
         # === GET OUTPUTS (callbacks already marked agents complete) ===
-        planner_output = str(plan_task.output)
+        # Cache planner output on first run to avoid re-execution on retries
+        if cached_planner_output is None:
+            cached_planner_output = str(plan_task.output)
+            cached_plan_task = plan_task
+            logger.info(f"[{job_id}] Cached planner output for potential retries")
+        planner_output = cached_planner_output
         executor_output = str(exec_task.output.raw) if hasattr(exec_task.output, 'raw') else str(exec_task.output)
         
         # === PARSE JSON ===
         structured_data = parse_executor_json(executor_output)
         
         if not structured_data:
-            emit_warning("Failed to parse JSON from executor output")
-            emit_message("executor", f"Retry {retry_count + 1}: JSON parsing failed, retrying...")
+            emit_warning("Failed to parse JSON from executor output", severity="critical")
+            emit_message(
+                "executor", 
+                f"Retry {retry_count + 1}: JSON parsing failed, retrying...",
+                msg_type="retry",
+                severity="critical",
+                retry_attempt=retry_count + 1
+            )
             logger.warning(f"[{job_id}] JSON parsing failed, retry {retry_count + 1}")
             retry_count += 1
             corrective_prompt = "⚠️ Your output was not valid JSON. Output ONLY valid JSON starting with { and ending with }"
@@ -226,32 +267,77 @@ def run_crew(
         
         # === VALIDATE AGAINST BASELINE ===
         # Note: critic status already set by task_callback, just emit messages
-        emit_message("critic", "Validating field mapping...")
+        emit_message("critic", "Validating field mapping...", msg_type="progress")
         validation_result = validate_against_baseline(baseline, structured_data)
         
-        if not validation_result.passed:
-            for issue in validation_result.issues:
-                emit_warning(issue)
-                logger.warning(f"[{job_id}] Validation issue: {issue}")
+        # Log warnings (non-blocking) - these are minor issues that don't require retry
+        if validation_result.has_warnings:
+            for warning_issue in validation_result.warnings:
+                emit_message(
+                    "critic",
+                    warning_issue.message,
+                    msg_type="warning",
+                    severity="warning",
+                    validation_details={
+                        "field": warning_issue.field,
+                        "expected": warning_issue.expected,
+                        "actual": warning_issue.actual
+                    } if warning_issue.field else None
+                )
+                logger.info(f"[{job_id}] Validation warning: {warning_issue.message}")
+        
+        # Only retry on CRITICAL issues (data loss, hallucination, missing contact)
+        if validation_result.has_critical_issues:
+            for critical_issue in validation_result.critical_issues:
+                emit_message(
+                    "critic",
+                    critical_issue.message,
+                    msg_type="error",
+                    severity="critical",
+                    validation_details={
+                        "field": critical_issue.field,
+                        "expected": critical_issue.expected,
+                        "actual": critical_issue.actual
+                    } if critical_issue.field else None
+                )
+                logger.warning(f"[{job_id}] Critical validation issue: {critical_issue.message}")
             
-            if retry_count < MAX_RETRIES:
-                emit_message("critic", "Data preservation issues detected")
-                emit_message("executor", f"Retry {retry_count + 1}: Correcting data preservation issues...")
+            if retry_count < MAX_RETRIES and validation_result.needs_retry:
+                # Show specific critical issue instead of generic message
+                first_issue = validation_result.critical_issues[0].message if validation_result.critical_issues else "Critical data issue"
+                emit_message(
+                    "critic", 
+                    f"Critical issue detected: {first_issue}",
+                    msg_type="error",
+                    severity="critical",
+                    retry_attempt=retry_count + 1
+                )
+                emit_message(
+                    "executor", 
+                    f"Retry {retry_count + 1}: Fixing critical data issues...",
+                    msg_type="retry",
+                    retry_attempt=retry_count + 1
+                )
                 corrective_prompt = validation_result.corrective_prompt
                 retry_count += 1
                 
                 if job_id:
                     job_store.increment_retry(job_id)
-                    # Reset statuses for retry
-                    job_store.update_agent_status(job_id, "planner", AgentStatus.PENDING)
+                    # Reset ONLY executor/critic for retry - planner output is cached
+                    # This saves 1 LLM call per retry by not re-running planner
                     job_store.update_agent_status(job_id, "executor", AgentStatus.PENDING)
                     job_store.update_agent_status(job_id, "critic", AgentStatus.PENDING)
                 continue
             else:
-                emit_warning(f"Max retries ({MAX_RETRIES}) reached. Some data may be missing.")
-                logger.warning(f"[{job_id}] Max retries reached, proceeding with partial data")
+                emit_message(
+                    "critic",
+                    f"Max retries ({MAX_RETRIES}) reached. Some critical issues may remain.",
+                    msg_type="warning",
+                    severity="warning"
+                )
+                logger.warning(f"[{job_id}] Max retries reached, proceeding despite critical issues")
         
-        # Validation passed or max retries reached
+        # Validation passed (no critical issues) or max retries reached
         break
     
     # === POST-PROCESSING (callbacks already handled agent statuses) ===

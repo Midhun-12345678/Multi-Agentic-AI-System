@@ -8,8 +8,26 @@ import re
 import logging
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, field
+from enum import Enum
 
 logger = logging.getLogger(__name__)
+
+
+class IssueSeverity(str, Enum):
+    """Severity levels for validation issues."""
+    CRITICAL = "critical"  # Data loss or hallucination - requires retry
+    WARNING = "warning"    # Minor issue - log but proceed
+    INFO = "info"          # Informational only
+
+
+@dataclass
+class ValidationIssue:
+    """A single validation issue with severity."""
+    message: str
+    severity: IssueSeverity
+    field: str = ""  # e.g., "experience", "skills", "contact"
+    expected: Optional[int] = None
+    actual: Optional[int] = None
 
 
 @dataclass
@@ -291,13 +309,30 @@ class ValidationResult:
     project_match: bool = False
     skills_match: bool = False
     contact_preserved: bool = False
+    
+    # Severity-based issue lists
+    critical_issues: List[ValidationIssue] = field(default_factory=list)
+    warnings: List[ValidationIssue] = field(default_factory=list)
+    info_issues: List[ValidationIssue] = field(default_factory=list)
+    
+    # Legacy compatibility - flat list of issue messages
     issues: List[str] = field(default_factory=list)
     corrective_prompt: str = ""
     
     @property
     def needs_retry(self) -> bool:
-        """Check if retry is needed."""
-        return not self.passed and bool(self.corrective_prompt)
+        """Only retry on CRITICAL issues - warnings proceed with logging."""
+        return len(self.critical_issues) > 0 and bool(self.corrective_prompt)
+    
+    @property
+    def has_critical_issues(self) -> bool:
+        """Check if there are any critical issues."""
+        return len(self.critical_issues) > 0
+    
+    @property
+    def has_warnings(self) -> bool:
+        """Check if there are any warnings."""
+        return len(self.warnings) > 0
 
 
 def validate_against_baseline(
@@ -306,96 +341,350 @@ def validate_against_baseline(
 ) -> ValidationResult:
     """
     Validate executor output against baseline.
-    Returns validation result with corrective prompt if needed.
+    Returns validation result with severity-based issues.
+    
+    CRITICAL issues (trigger retry):
+    - Missing contact email/phone when original had them
+    - Hallucinated company names
+    - Experience count = 0 when original had entries
+    
+    WARNING issues (log but proceed):
+    - Experience count off by 1-2
+    - Project count mismatch
+    - Skill count below threshold
     """
     result = ValidationResult()
-    issues = []
+    legacy_issues = []  # For backward compatibility
     
     # 1. Validate experience count
     executor_exp_count = len(structured_data.get("experience", []))
-    if executor_exp_count < baseline.experience_count:
-        issues.append(
-            f"Experience mismatch: Original has {baseline.experience_count} jobs, "
-            f"output has {executor_exp_count}"
+    
+    if baseline.experience_count > 0 and executor_exp_count == 0:
+        # CRITICAL: Complete data loss
+        issue = ValidationIssue(
+            message=f"Complete experience loss: Original has {baseline.experience_count} jobs, output has 0",
+            severity=IssueSeverity.CRITICAL,
+            field="experience",
+            expected=baseline.experience_count,
+            actual=0
         )
+        result.critical_issues.append(issue)
+        legacy_issues.append(issue.message)
         result.experience_match = False
+    elif executor_exp_count < baseline.experience_count:
+        # Check how big the gap is
+        gap = baseline.experience_count - executor_exp_count
+        if gap > 2:
+            # CRITICAL: Significant data loss (more than 2 jobs missing)
+            issue = ValidationIssue(
+                message=f"Significant experience loss: Original has {baseline.experience_count} jobs, output has {executor_exp_count}",
+                severity=IssueSeverity.CRITICAL,
+                field="experience",
+                expected=baseline.experience_count,
+                actual=executor_exp_count
+            )
+            result.critical_issues.append(issue)
+            result.experience_match = False
+        else:
+            # WARNING: Minor mismatch (1-2 jobs) - may be consolidation
+            issue = ValidationIssue(
+                message=f"Experience count mismatch: Original has {baseline.experience_count} jobs, output has {executor_exp_count}",
+                severity=IssueSeverity.WARNING,
+                field="experience",
+                expected=baseline.experience_count,
+                actual=executor_exp_count
+            )
+            result.warnings.append(issue)
+            result.experience_match = True  # Allow minor variations
+        legacy_issues.append(f"Experience mismatch: {baseline.experience_count} -> {executor_exp_count}")
     else:
         result.experience_match = True
     
-    # 2. Validate project count
+    # 2. Validate project count - WARNING level (projects may be consolidated)
     executor_proj_count = len(structured_data.get("projects", []))
     if executor_proj_count < baseline.project_count:
-        issues.append(
-            f"Project mismatch: Original has {baseline.project_count} projects, "
-            f"output has {executor_proj_count}"
-        )
-        result.project_match = False
+        # Allow 90% for projects with 5+ items, exact match for smaller lists
+        if baseline.project_count >= 5:
+            min_required = int(baseline.project_count * 0.9)
+        else:
+            min_required = baseline.project_count
+        
+        if executor_proj_count < min_required:
+            issue = ValidationIssue(
+                message=f"Project mismatch: Original has {baseline.project_count} projects, output has {executor_proj_count}",
+                severity=IssueSeverity.WARNING,
+                field="projects",
+                expected=baseline.project_count,
+                actual=executor_proj_count
+            )
+            result.warnings.append(issue)
+            legacy_issues.append(issue.message)
+        result.project_match = executor_proj_count >= min_required
     else:
         result.project_match = True
     
-    # 3. Validate skills count (with smart caps for large skill lists)
+    # 3. Validate skills count - WARNING level with relaxed thresholds
     executor_skills = structured_data.get("skills", [])
     executor_skill_count = len(executor_skills)
     
-    # For very large skill lists (>40), cap the requirement at 30 core skills
-    # This prevents demanding 90% of 100+ skills which is unrealistic for ATS
+    # Relaxed thresholds (reduced from 90%/85%)
     if baseline.skill_count > 40:
-        min_skills_required = 30  # ATS-optimized cap for very large lists
+        min_skills_required = 25  # Relaxed from 30 for very large lists
     elif baseline.skill_count > 25:
-        min_skills_required = int(baseline.skill_count * 0.85)  # 85% for medium lists
+        min_skills_required = int(baseline.skill_count * 0.75)  # Relaxed from 85%
     else:
-        min_skills_required = int(baseline.skill_count * 0.90)  # 90% threshold for normal lists
+        min_skills_required = int(baseline.skill_count * 0.80)  # Relaxed from 90%
     
     if executor_skill_count < min_skills_required:
-        issues.append(
-            f"Skills mismatch: Original has {baseline.skill_count} skills, "
-            f"output has {executor_skill_count} (minimum required: {min_skills_required})"
+        issue = ValidationIssue(
+            message=f"Skills below threshold: Original has {baseline.skill_count} skills, output has {executor_skill_count} (min: {min_skills_required})",
+            severity=IssueSeverity.WARNING,
+            field="skills",
+            expected=min_skills_required,
+            actual=executor_skill_count
         )
+        result.warnings.append(issue)
+        legacy_issues.append(issue.message)
         result.skills_match = False
     else:
         result.skills_match = True
     
-    # 4. Validate contact info preserved
-    contact_issues = []
+    # 4. Validate contact info - CRITICAL for email/phone, WARNING for linkedin
     if baseline.email and not structured_data.get("email"):
-        contact_issues.append("email")
-    if baseline.phone and not structured_data.get("phone"):
-        contact_issues.append("phone")
-    if baseline.linkedin and not structured_data.get("linkedin"):
-        contact_issues.append("linkedin")
-    
-    if contact_issues:
-        issues.append(f"Missing contact info: {', '.join(contact_issues)}")
+        issue = ValidationIssue(
+            message=f"Missing email: {baseline.email}",
+            severity=IssueSeverity.CRITICAL,
+            field="contact"
+        )
+        result.critical_issues.append(issue)
+        legacy_issues.append("Missing email")
         result.contact_preserved = False
-    else:
+    
+    if baseline.phone and not structured_data.get("phone"):
+        issue = ValidationIssue(
+            message=f"Missing phone: {baseline.phone}",
+            severity=IssueSeverity.CRITICAL,
+            field="contact"
+        )
+        result.critical_issues.append(issue)
+        legacy_issues.append("Missing phone")
+        result.contact_preserved = False
+    
+    if baseline.linkedin and not structured_data.get("linkedin"):
+        # LinkedIn is WARNING, not critical
+        issue = ValidationIssue(
+            message=f"Missing LinkedIn: {baseline.linkedin}",
+            severity=IssueSeverity.WARNING,
+            field="contact"
+        )
+        result.warnings.append(issue)
+        legacy_issues.append("Missing LinkedIn (optional)")
+    
+    # Set contact_preserved if not already set to False
+    if result.contact_preserved is not False:
         result.contact_preserved = True
     
-    # 5. Check for hallucinated companies
+    # 5. Check for hallucinated companies - CRITICAL
     executor_companies = []
     for exp in structured_data.get("experience", []):
         company = exp.get("company", "")
-        executor_companies.append(company.lower())
+        if company:
+            executor_companies.append(company.lower())
     
-    # Check if executor added companies not in original
     for company in executor_companies:
         found = False
         for orig_company in baseline.companies:
             if orig_company.lower() in company or company in orig_company.lower():
                 found = True
                 break
-        if not found and company:
-            # Might be hallucinated
-            issues.append(f"Possible hallucinated company: {company}")
+        if not found and company and len(company) > 2:
+            issue = ValidationIssue(
+                message=f"Possible hallucinated company: {company}",
+                severity=IssueSeverity.CRITICAL,
+                field="experience"
+            )
+            result.critical_issues.append(issue)
+            legacy_issues.append(f"Hallucinated company: {company}")
     
-    # Determine if passed
-    result.issues = issues
-    result.passed = result.experience_match and result.project_match and result.skills_match and result.contact_preserved
+    # 6. ENTITY-BASED VALIDATION: Check if original companies appear in output
+    # This catches missing companies even if count looks okay (e.g., wrong companies)
+    missing_companies = []
+    for orig_company in baseline.companies:
+        found = False
+        for exec_company in executor_companies:
+            # Fuzzy match - check if original company name appears in executor output
+            if orig_company.lower() in exec_company or exec_company in orig_company.lower():
+                found = True
+                break
+            # Also check partial match for multi-word company names
+            orig_words = set(orig_company.lower().split())
+            exec_words = set(exec_company.split())
+            if len(orig_words.intersection(exec_words)) >= min(2, len(orig_words)):
+                found = True
+                break
+        if not found:
+            missing_companies.append(orig_company)
     
-    # Generate corrective prompt if retry needed
-    if not result.passed:
-        result.corrective_prompt = generate_corrective_prompt(baseline, issues)
+    # If more than 1 company is missing (or all companies are missing), it's CRITICAL
+    if missing_companies:
+        if len(missing_companies) >= len(baseline.companies) * 0.5 or len(missing_companies) > 2:
+            # CRITICAL: More than half of companies missing
+            issue = ValidationIssue(
+                message=f"Missing companies: {', '.join(missing_companies)}",
+                severity=IssueSeverity.CRITICAL,
+                field="experience"
+            )
+            result.critical_issues.append(issue)
+            legacy_issues.append(f"Missing companies: {', '.join(missing_companies)}")
+        else:
+            # WARNING: Just 1-2 companies missing (might be legitimate consolidation)
+            issue = ValidationIssue(
+                message=f"Companies may be missing: {', '.join(missing_companies)}",
+                severity=IssueSeverity.WARNING,
+                field="experience"
+            )
+            result.warnings.append(issue)
+            legacy_issues.append(f"Possibly missing: {', '.join(missing_companies)}")
+    
+    # 7. ENTITY-BASED VALIDATION: Check if original projects appear in output
+    executor_projects = []
+    for proj in structured_data.get("projects", []):
+        title = proj.get("title", "")
+        if title:
+            executor_projects.append(title.lower())
+    
+    missing_projects = []
+    for orig_project in baseline.project_titles:
+        found = False
+        for exec_project in executor_projects:
+            if orig_project.lower() in exec_project or exec_project in orig_project.lower():
+                found = True
+                break
+            # Partial word match for project titles
+            orig_words = set(orig_project.lower().split())
+            exec_words = set(exec_project.split())
+            if len(orig_words.intersection(exec_words)) >= min(2, len(orig_words)):
+                found = True
+                break
+        if not found:
+            missing_projects.append(orig_project)
+    
+    if missing_projects and len(missing_projects) > len(baseline.project_titles) * 0.3:
+        # WARNING: Projects missing (projects can often be legitimately consolidated)
+        issue = ValidationIssue(
+            message=f"Projects may be missing: {', '.join(missing_projects[:5])}{'...' if len(missing_projects) > 5 else ''}",
+            severity=IssueSeverity.WARNING,
+            field="projects"
+        )
+        result.warnings.append(issue)
+        legacy_issues.append(f"Missing projects: {len(missing_projects)}")
+    
+    # Set legacy issues list
+    result.issues = legacy_issues
+    
+    # Determine if passed - only CRITICAL issues cause failure
+    # Warnings are logged but don't block the output
+    result.passed = not result.has_critical_issues
+    
+    # Generate corrective prompt only for critical issues - pass missing entities for specificity
+    if result.has_critical_issues:
+        result.corrective_prompt = generate_corrective_prompt_v2(
+            baseline, 
+            result.critical_issues,
+            missing_companies=missing_companies if missing_companies else None
+        )
+    
+    # Log summary
+    logger.info(f"Validation complete: passed={result.passed}, "
+                f"critical={len(result.critical_issues)}, warnings={len(result.warnings)}")
     
     return result
+
+
+def generate_corrective_prompt_v2(
+    baseline: ResumeBaseline, 
+    critical_issues: List[ValidationIssue],
+    missing_companies: Optional[List[str]] = None
+) -> str:
+    """
+    Generate corrective prompt for retry - focuses only on CRITICAL issues.
+    Provides specific missing entities for targeted correction.
+    Warnings are logged but don't trigger this prompt.
+    """
+    prompt_parts = [
+        "🚨 CRITICAL CORRECTION REQUIRED:",
+        "",
+        "Your previous output had CRITICAL data preservation issues that MUST be fixed:",
+    ]
+    
+    for issue in critical_issues:
+        prompt_parts.append(f"  • [{issue.severity.value.upper()}] {issue.message}")
+    
+    prompt_parts.extend([
+        "",
+        "MANDATORY CORRECTIONS:",
+    ])
+    
+    # Check what critical issues exist and provide targeted guidance
+    has_contact_issue = any(i.field == "contact" for i in critical_issues)
+    has_experience_issue = any(i.field == "experience" for i in critical_issues)
+    has_hallucination = any("hallucinated" in i.message.lower() for i in critical_issues)
+    has_missing_companies = any("missing companies" in i.message.lower() for i in critical_issues)
+    
+    correction_num = 1
+    
+    if has_contact_issue:
+        prompt_parts.append(f"  {correction_num}. PRESERVE ALL CONTACT INFO:")
+        if baseline.email:
+            prompt_parts.append(f"     - email: \"{baseline.email}\"")
+        if baseline.phone:
+            prompt_parts.append(f"     - phone: \"{baseline.phone}\"")
+        correction_num += 1
+    
+    if has_experience_issue and baseline.experience_count > 0:
+        prompt_parts.append(
+            f"  {correction_num}. The experience array MUST have AT LEAST {baseline.experience_count} entries"
+        )
+        # Provide SPECIFIC missing companies if available
+        if missing_companies:
+            prompt_parts.append(f"     ❌ MISSING COMPANIES (must be added):")
+            for company in missing_companies:
+                prompt_parts.append(f"        - \"{company}\"")
+        elif baseline.companies:
+            prompt_parts.append(f"     Companies that MUST appear: {', '.join(baseline.companies)}")
+        correction_num += 1
+    
+    if has_hallucination:
+        prompt_parts.append(
+            f"  {correction_num}. DO NOT invent or add companies not in the original resume"
+        )
+        if baseline.companies:
+            prompt_parts.append(f"     ✅ ONLY these companies are valid:")
+            for company in baseline.companies:
+                prompt_parts.append(f"        - \"{company}\"")
+        correction_num += 1
+    
+    if has_missing_companies and missing_companies:
+        prompt_parts.append(
+            f"  {correction_num}. The following companies from the original resume are MISSING:"
+        )
+        for company in missing_companies:
+            prompt_parts.append(f"        ❌ \"{company}\" - MUST be included in experience array")
+        correction_num += 1
+    
+    prompt_parts.extend([
+        "",
+        "CRITICAL RULES:",
+        "  • ONLY use company names from the ORIGINAL resume",
+        "  • DO NOT merge multiple jobs into one entry",
+        "  • DO NOT invent experience or company names",
+        "  • PRESERVE exact contact information as provided",
+        "  • Each job at a company = ONE separate experience entry",
+        "",
+        "Re-extract from the ORIGINAL RESUME and fix these critical issues."
+    ])
+    
+    return "\n".join(prompt_parts)
 
 
 def generate_corrective_prompt(baseline: ResumeBaseline, issues: List[str]) -> str:

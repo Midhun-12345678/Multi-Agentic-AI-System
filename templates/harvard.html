@@ -111,9 +111,16 @@
   <!-- Education -->
   {% if education %}
   <div class="section-title">Education</div>
+  {% for edu in education %}
   <div class="entry">
-    <p>{{ education }}</p>
+    <div class="entry-header">
+      <div class="entry-title">{{ edu.degree }}</div>
+      {% if edu.year %}<div class="entry-location">{{ edu.year }}</div>{% endif %}
+    </div>
+    {% if edu.institution %}<div class="entry-subtitle">{{ edu.institution }}</div>{% endif %}
+    {% if edu.details %}<div>{{ edu.details | md2html | safe }}</div>{% endif %}
   </div>
+  {% endfor %}
   {% endif %}
 
   <!-- Experience -->
@@ -135,12 +142,11 @@
 
   <!-- Projects -->
   {% if projects %}
-  <div class="section-title">Leadership & Activities</div>
+  <div class="section-title">Projects & Activities</div>
   {% for project in projects %}
   <div class="entry">
     <div class="entry-header">
-      <div class="entry-title">{{ project.title }}</div>
-      <div class="entry-location">{% if project.tech_stack %}{{ project.tech_stack }}{% endif %}</div>
+      <div class="entry-title">{{ project.title }}{% if project.tech_stack %} | <span style="font-weight: normal; font-style: italic;">Tech: {{ project.tech_stack }}</span>{% endif %}</div>
     </div>
     <div>{{ project.details | md2html | safe }}</div>
   </div>

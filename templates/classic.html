@@ -83,7 +83,12 @@ li { margin-bottom: 1px; }
 
 {% if education %}
 <h2>Education</h2>
-<p>{{education}}</p>
+{% for edu in education %}
+<div style="margin-bottom: 8px;">
+  <strong>{{ edu.degree }}</strong>{% if edu.institution %} | {{ edu.institution }}{% endif %}{% if edu.year %} | {{ edu.year }}{% endif %}
+  {% if edu.details %}<br>{{ edu.details }}{% endif %}
+</div>
+{% endfor %}
 {% endif %}
 
 </body>

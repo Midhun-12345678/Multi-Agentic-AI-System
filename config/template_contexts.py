@@ -9,18 +9,18 @@ TEMPLATE_CONTEXTS = {
         "description": "Center-aligned header with maroon accent border, traditional serif font, conservative professional tone",
         "structure": {
             "header": "Center-aligned name and contact (email • phone • linkedin • github)",
-            "section_order": ["Professional Summary (at top for ATS)", "Education", "Experience", "Leadership & Activities (Projects)", "Skills & Interests"],
+            "section_order": ["Professional Summary (at top for ATS)", "Education", "Experience", "Projects & Activities", "Skills & Interests"],
             "experience_format": "Company name as title, role as subtitle",
             "style": "Concise bullets (1 line each), formal language, achievement-focused"
         },
         "formatting_rules": [
-            "Use ### for section headers (Education, Experience, Leadership & Activities, Skills & Interests)",
+            "Use ### for section headers (Education, Experience, Projects & Activities, Skills & Interests)",
             "Bold **company names** and **project titles** using markdown",
             "Each bullet point = ONE LINE only (50-80 characters ideal)",
             "Use strong action verbs and quantify results",
             "Professional, formal tone - no casual language",
             "PRESERVE same number of bullets as original resume",
-            "Projects labeled as 'Leadership & Activities'"
+            "Projects labeled as 'Projects & Activities'"
         ],
         "example_output": """### Education
 B.S. Computer Science, MIT, Cambridge, MA | May 2020 | GPA: 3.8
@@ -36,7 +36,7 @@ B.S. Computer Science, MIT, Cambridge, MA | May 2020 | GPA: 3.8
 - Developed SaaS features using React and Node.js
 - Increased test coverage from 40% to 90%
 
-### Leadership & Activities
+### Projects & Activities
 
 **Open Source Contributor** | Python, TensorFlow, React
 - Contributed to 10+ projects including React, TensorFlow
@@ -53,7 +53,14 @@ Frameworks: React, Node.js, Django, FastAPI""",
             "phone": "+1-555-123-4567",
             "linkedin": "linkedin.com/in/johnsmith",
             "github": "github.com/johnsmith",
-            "education": "B.S. Computer Science, MIT, Cambridge, MA | May 2020 | GPA: 3.8",
+            "education": [
+                {
+                    "degree": "B.S. Computer Science",
+                    "institution": "MIT, Cambridge, MA",
+                    "year": "May 2020",
+                    "details": "GPA: 3.8"
+                }
+            ],
             "experience": [
                 {
                     "company": "Tech Corporation",
@@ -175,7 +182,14 @@ B.S. Computer Science, Stanford University | 2019""",
                     "details": "- Task system: 1M+ daily tasks\\n- Grafana/Prometheus monitoring"
                 }
             ],
-            "education": "B.S. Computer Science, Stanford University | 2019",
+            "education": [
+                {
+                    "degree": "B.S. Computer Science",
+                    "institution": "Stanford University",
+                    "year": "2019",
+                    "details": ""
+                }
+            ],
             "certifications": [],
             "awards": [],
             "languages": []
@@ -252,7 +266,14 @@ B.S. Computer Science, Boston University | 2017""",
                 "Databases: PostgreSQL, MySQL, MongoDB"
             ],
             "projects": [],
-            "education": "B.S. Computer Science, Boston University | 2017",
+            "education": [
+                {
+                    "degree": "B.S. Computer Science",
+                    "institution": "Boston University",
+                    "year": "2017",
+                    "details": ""
+                }
+            ],
             "certifications": [],
             "awards": [],
             "languages": []
@@ -332,7 +353,11 @@ def get_json_structure_prompt(template_name: str) -> str:
   • name: Full name in UPPERCASE or Title Case
   • email, phone, linkedin, github: Contact information (strings)
   • summary: Professional summary paragraph (string, can be empty "")
-  • education: Education details with newlines (\\n) between lines (string)
+  • education: Array of objects with:
+    - degree: Degree name like "B.S. Computer Science" (string)
+    - institution: School name and location (string)
+    - year: Graduation year like "May 2020" or "2020" (string)
+    - details: Additional info like GPA, honors (string, can be empty)
   • experience: Array of objects with:
     - company: Company name (string)
     - role: Job title (string)
