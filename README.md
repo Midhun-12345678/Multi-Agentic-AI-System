@@ -36,7 +36,7 @@ Together they form a **goal-driven AI workflow** that mimics real decision pipel
 
 
 ## 🖥️ Demo
-https://my-portfolio-lilac-gamma.vercel.app/
+https://multi-agentic-ai-system-jwj3.vercel.app/
 
 ##BACKEND RENDER LINK: https://ai-resume-optimizer-api.onrender.com
 ### Streamlit UI
