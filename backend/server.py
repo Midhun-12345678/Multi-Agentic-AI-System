@@ -175,7 +175,7 @@ async def optimize_resume(
     job_id = str(uuid.uuid4())
     
     try:
-        resume_text = read_resume(resume)
+        resume_text, page_count = read_resume(resume)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to read resume: {str(e)}")
     

@@ -1,0 +1,40 @@
+[
+  {
+    "job_id": "e341a565-cdb2-43f1-9299-f1332ce97a7f",
+    "job_category": "Job Title: AI Engineer (2+ Years Experience)\r\n\r\nLo",
+    "timestamp": "2026-03-12T05:44:42.290535+00:00",
+    "original_ats": 0.0,
+    "optimized_ats": 0.0,
+    "ats_improvement": 0.0,
+    "critic_verdict": "REVISE",
+    "overall_judge_score": 79,
+    "keyword_match_rate": 75,
+    "readability_score": 85,
+    "authenticity_score": 70,
+    "ats_compatibility_score": 90,
+    "improvement_suggestions": [
+      "Add more specific achievements to enhance authenticity.",
+      "Integrate additional keywords from the job description more naturally.",
+      "Ensure all technical skills are explicitly mentioned in context."
+    ]
+  },
+  {
+    "job_id": "b6448800-4320-4d7f-871c-bc073e323d9e",
+    "job_category": "Job Title: AI Engineer (2+ Years Experience)\r\n\r\nLo",
+    "timestamp": "2026-03-12T05:51:21.186876+00:00",
+    "original_ats": 0.0,
+    "optimized_ats": 0.0,
+    "ats_improvement": 0.0,
+    "critic_verdict": "REVISE",
+    "overall_judge_score": 75,
+    "keyword_match_rate": 70,
+    "readability_score": 85,
+    "authenticity_score": 60,
+    "ats_compatibility_score": 90,
+    "improvement_suggestions": [
+      "Replace generic action verbs with specific achievements.",
+      "Ensure all technical skills are contextually relevant to the job description.",
+      "Add more personal projects or experiences that demonstrate unique contributions."
+    ]
+  }
+]

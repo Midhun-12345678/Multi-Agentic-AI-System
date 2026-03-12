@@ -2,8 +2,8 @@
  * AI Resume Optimizer
  * Main Application Component
  */
-import React, { useState, useCallback } from 'react';
-import { Sparkles, ArrowLeft, Wifi, WifiOff } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Sparkles, ArrowLeft, Wifi, WifiOff, AlertTriangle, X, Server } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Progress } from './components/ui/progress';
 import { UploadPanel } from './components/resume/UploadPanel';
@@ -29,6 +29,10 @@ function App() {
   const [jobId, setJobId] = useState(null);
   const [submitError, setSubmitError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showColdStartModal, setShowColdStartModal] = useState(false);
+  const [hasSeenDisclaimer, setHasSeenDisclaimer] = useState(
+    () => sessionStorage.getItem('coldStartDisclaimerSeen') === 'true'
+  );
   
   // Polling connection for real-time updates
   const {
@@ -44,6 +48,13 @@ function App() {
   
   // Handle form submission
   const handleSubmit = useCallback(async (resumeFile, jobDescription, template) => {
+    // Show cold start disclaimer on first submission
+    if (!hasSeenDisclaimer) {
+      setShowColdStartModal(true);
+      sessionStorage.setItem('coldStartDisclaimerSeen', 'true');
+      setHasSeenDisclaimer(true);
+    }
+    
     setIsSubmitting(true);
     setSubmitError(null);
     
@@ -53,11 +64,15 @@ function App() {
       setAppState(STATES.PROCESSING);
     } catch (err) {
       console.error('Submission failed:', err);
-      setSubmitError(err.response?.data?.detail || 'Failed to submit. Please try again.');
+      // Show cold start modal on fetch errors (likely cold start)
+      if (err.message?.includes('fetch') || err.code === 'ERR_NETWORK') {
+        setShowColdStartModal(true);
+      }
+      setSubmitError(err.response?.data?.detail || 'Failed to submit. The server may be waking up - please wait 30-50 seconds and try again.');
     } finally {
       setIsSubmitting(false);
     }
-  }, []);
+  }, [hasSeenDisclaimer]);
   
   // Handle state transitions based on job status
   React.useEffect(() => {
@@ -78,6 +93,11 @@ function App() {
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      {/* Cold Start Disclaimer Modal */}
+      {showColdStartModal && (
+        <ColdStartModal onClose={() => setShowColdStartModal(false)} />
+      )}
+      
       {/* Background effects */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-violet-500/10 rounded-full blur-3xl" />
@@ -326,6 +346,99 @@ function ResultsScreen({ result, onReset }) {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Cold Start Disclaimer Modal
+ * Explains the backend wake-up time on free tier
+ */
+function ColdStartModal({ onClose }) {
+  const [countdown, setCountdown] = useState(50);
+  
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, []);
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-slate-700">
+          <div className="flex items-center gap-2 text-amber-400">
+            <Server className="w-5 h-5" />
+            <span className="font-semibold">Server Cold Start</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        {/* Content */}
+        <div className="p-6 space-y-4">
+          <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-slate-300">
+              <p className="font-medium text-amber-400 mb-1">Free Tier Deployment Notice</p>
+              <p>
+                This backend is deployed on a <strong>free tier service</strong> (Render) 
+                that goes to sleep after 15 minutes of inactivity.
+              </p>
+            </div>
+          </div>
+          
+          <div className="space-y-3 text-sm text-slate-400">
+            <p>
+              <strong className="text-white">First request may take 30-50 seconds</strong> while 
+              the server wakes up. This is normal behavior for free tier deployments.
+            </p>
+            <p>
+              Subsequent requests will be fast until the server goes idle again.
+            </p>
+          </div>
+          
+          {/* Countdown */}
+          {countdown > 0 && (
+            <div className="text-center p-4 rounded-lg bg-slate-800/50">
+              <p className="text-xs text-slate-500 mb-1">Server warming up...</p>
+              <p className="text-2xl font-bold text-violet-400">{countdown}s</p>
+              <p className="text-xs text-slate-500 mt-1">Please wait before retrying</p>
+            </div>
+          )}
+          
+          {countdown === 0 && (
+            <div className="text-center p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+              <p className="text-emerald-400 font-medium">Server should be ready now!</p>
+              <p className="text-xs text-slate-400 mt-1">Click submit to try again</p>
+            </div>
+          )}
+        </div>
+        
+        {/* Footer */}
+        <div className="p-4 border-t border-slate-700">
+          <button
+            onClick={onClose}
+            className="w-full py-2 px-4 rounded-lg bg-violet-600 hover:bg-violet-500 
+                       text-white font-medium transition-colors"
+          >
+            {countdown > 0 ? "Got it, I'll wait" : 'Try Again'}
+          </button>
+        </div>
       </div>
     </div>
   );

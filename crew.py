@@ -9,6 +9,8 @@ from crewai.tasks.task_output import TaskOutput
 from agents import planner, executor, critic
 from config.template_contexts import get_template_prompt_context, get_json_structure_prompt
 from utils.validation_parser import parse_validation_report
+from utils.llm_judge import evaluate_resume_optimization
+from utils.score_history import save_optimization_result
 from utils.job_store import job_store, AgentStatus
 from utils.field_mapper import extract_baseline, validate_against_baseline, compare_counts
 from typing import Optional, Dict, Callable
@@ -129,6 +131,10 @@ def run_crew(
     # Cache planner output to avoid re-running on retries (saves ~1 LLM call per retry)
     cached_planner_output = None
     cached_plan_task = None
+    
+    # Track if critic rejected after max retries
+    authenticity_warning = False
+    parsed_critic = None
     
     logger.info(f"[{job_id}] Starting crew execution loop...")
     
@@ -337,14 +343,96 @@ def run_crew(
                 )
                 logger.warning(f"[{job_id}] Max retries reached, proceeding despite critical issues")
         
-        # Validation passed (no critical issues) or max retries reached
+        # === ADVERSARIAL CRITIC VERDICT CHECK ===
+        # Get critic output and parse structured report
+        critic_output_raw = str(review_task.output.raw) if hasattr(review_task.output, 'raw') else str(review_task.output)
+        parsed_critic = parse_validation_report(critic_output_raw)
+        
+        # Verdict-based retry logic
+        verdict = parsed_critic.get("overall_verdict", "REVISE")
+        
+        if verdict == "REVISE" and retry_count < MAX_RETRIES:
+            emit_message(
+                "critic",
+                f"Critic verdict: REVISE - requesting corrections",
+                msg_type="warning",
+                severity="warning",
+                retry_attempt=retry_count + 1
+            )
+            corrective_prompt = parsed_critic.get("correction_instructions", "Please fix the issues identified by the critic.")
+            retry_count += 1
+            if job_id:
+                job_store.increment_retry(job_id)
+                job_store.update_agent_status(job_id, "executor", AgentStatus.PENDING)
+                job_store.update_agent_status(job_id, "critic", AgentStatus.PENDING)
+            continue
+        
+        elif verdict == "REJECT":
+            if retry_count < MAX_RETRIES:
+                emit_message(
+                    "critic",
+                    f"Critic verdict: REJECT - critical issues found",
+                    msg_type="error",
+                    severity="critical",
+                    retry_attempt=retry_count + 1
+                )
+                corrective_prompt = "CRITICAL REJECTION: " + parsed_critic.get("correction_instructions", "Critical quality issues detected. Please completely rewrite.")
+                retry_count += 1
+                if job_id:
+                    job_store.increment_retry(job_id)
+                    job_store.update_agent_status(job_id, "executor", AgentStatus.PENDING)
+                    job_store.update_agent_status(job_id, "critic", AgentStatus.PENDING)
+                continue
+            else:
+                logger.warning(f"[{job_id}] WARNING: Resume rejected by critic after max retries. Using best available output.")
+                emit_message(
+                    "critic",
+                    "Max retries reached. Using best available output despite rejection.",
+                    msg_type="warning",
+                    severity="critical"
+                )
+                authenticity_warning = True
+                # Fall through to break
+        
+        # APPROVE or REJECT with max retries reached - exit loop
         break
     
     # === POST-PROCESSING (callbacks already handled agent statuses) ===
     critic_output = str(review_task.output.raw) if hasattr(review_task.output, 'raw') else str(review_task.output)
     
-    # Parse validation report from critic
-    validation_data = parse_validation_report(critic_output)
+    # Use parsed_critic from loop if available, otherwise parse now
+    if parsed_critic is None:
+        parsed_critic = parse_validation_report(critic_output)
+    validation_data = parsed_critic
+    
+    # === LLM JUDGE EVALUATION ===
+    judge_scores = {}
+    try:
+        logger.info(f"[{job_id}] Running LLM judge evaluation...")
+        judge_scores = evaluate_resume_optimization(
+            original_resume=resume_text,
+            optimized_resume=executor_output,
+            job_description=job_description,
+            critic_report=parsed_critic
+        )
+        logger.info(f"[{job_id}] Judge overall score: {judge_scores.get('overall_score', 0)}")
+    except Exception as e:
+        logger.error(f"[{job_id}] Judge evaluation failed: {e}")
+        judge_scores = {"overall_score": 0, "error": str(e)}
+    
+    # === SAVE TO SCORE HISTORY ===
+    try:
+        save_optimization_result(
+            job_id=job_id or "unknown",
+            job_category=job_description[:50] if job_description else "unknown",
+            original_ats=0.0,  # Computed in main.py, placeholder here
+            optimized_ats=0.0,  # Computed in main.py, placeholder here
+            judge_scores=judge_scores,
+            critic_verdict=parsed_critic.get("overall_verdict", "REVISE")
+        )
+        logger.info(f"[{job_id}] Saved to score history")
+    except Exception as e:
+        logger.error(f"[{job_id}] Failed to save to score history: {e}")
     
     # Add baseline comparison
     if structured_data:
@@ -362,7 +450,10 @@ def run_crew(
             "experience_count": baseline.experience_count,
             "project_count": baseline.project_count,
             "skill_count": baseline.skill_count
-        }
+        },
+        "judge_scores": judge_scores,
+        "critic_report": parsed_critic,
+        "authenticity_warning": authenticity_warning
     }
     
     if structured_data:

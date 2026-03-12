@@ -188,7 +188,11 @@ export function ResumePreview({ data }) {
                 Education
               </h2>
               <p className="text-slate-600 text-sm whitespace-pre-line">
-                {education.replace(/\\n/g, '\n')}
+                {typeof education === 'string' 
+                  ? education.replace(/\\n/g, '\n')
+                  : Array.isArray(education)
+                    ? education.join('\n')
+                    : JSON.stringify(education)}
               </p>
             </section>
           )}

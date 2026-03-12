@@ -9,94 +9,146 @@ from typing import Dict, List, Optional
 
 def parse_validation_report(critic_output: str) -> Dict:
     """
-    Parse the validation report from critic agent output.
-    Returns structured validation metadata.
+    Parse the validation report from adversarial critic agent output.
+    Returns structured validation metadata for the new report format.
+    
+    Expected sections:
+    - DATA_INTEGRITY
+    - KEYWORD_NATURALNESS
+    - HUMAN_AUTHENTICITY
+    - RECRUITER_CREDIBILITY
+    - VOICE_PRESERVATION
+    - OVERALL_VERDICT
+    - CORRECTION_INSTRUCTIONS
     """
+    # Safe defaults
     validation_data = {
-        "all_fields_mapped": False,
-        "jobs_mapped": {"original": 0, "optimized": 0, "match": False},
-        "projects_mapped": {"original": 0, "optimized": 0, "match": False},
-        "contact_info_preserved": [],
-        "companies_preserved": [],
-        "education_preserved": False,
-        "format_compliance": "Unknown",
-        "data_integrity": "Unknown",
-        "warnings": [],
+        "data_integrity": {"passed": False, "details": ""},
+        "keyword_naturalness": {"score": 5, "flagged_keywords": []},
+        "human_authenticity": {"passed": False, "flagged_bullets": []},
+        "recruiter_credibility": {"passed": False, "reasons": ""},
+        "voice_preservation": {"passed": False, "notes": ""},
+        "overall_verdict": "REVISE",
+        "correction_instructions": "",
         "validation_passed": False
     }
     
-    # Look for validation report section
-    if "VALIDATION REPORT:" in critic_output or "---" in critic_output:
-        # Extract validation section
-        validation_section = ""
-        if "---" in critic_output:
-            parts = critic_output.split("---")
-            if len(parts) > 1:
-                validation_section = parts[-1]  # Last section after ---
+    try:
+        # Split into sections using "### " as delimiter
+        sections = {}
+        current_section = None
+        current_content = []
         
-        # Parse jobs mapped
-        jobs_match = re.search(r'Jobs Mapped:\s*\[?(\d+)\s*original\s*→\s*(\d+)\s*optimized\]?', validation_section, re.I)
-        if jobs_match:
-            original_jobs = int(jobs_match.group(1))
-            optimized_jobs = int(jobs_match.group(2))
-            validation_data["jobs_mapped"] = {
-                "original": original_jobs,
-                "optimized": optimized_jobs,
-                "match": original_jobs == optimized_jobs
-            }
+        for line in critic_output.split('\n'):
+            if line.strip().startswith('### '):
+                # Save previous section
+                if current_section:
+                    sections[current_section] = '\n'.join(current_content).strip()
+                # Start new section
+                current_section = line.strip()[4:].strip().upper()
+                current_content = []
+            else:
+                current_content.append(line)
         
-        # Parse projects mapped
-        projects_match = re.search(r'Projects:\s*\[?(\d+)\s*original\s*→\s*(\d+)\s*optimized\]?', validation_section, re.I)
-        if projects_match:
-            original_projects = int(projects_match.group(1))
-            optimized_projects = int(projects_match.group(2))
-            validation_data["projects_mapped"] = {
-                "original": original_projects,
-                "optimized": optimized_projects,
-                "match": original_projects == optimized_projects
-            }
+        # Save last section
+        if current_section:
+            sections[current_section] = '\n'.join(current_content).strip()
         
-        # Parse contact info
-        contact_match = re.search(r'Contact Info:\s*\[([^\]]+)\]', validation_section, re.I)
-        if contact_match:
-            contact_items = [item.strip() for item in contact_match.group(1).split(',')]
-            validation_data["contact_info_preserved"] = contact_items
+        # Parse DATA_INTEGRITY
+        if 'DATA_INTEGRITY' in sections:
+            content = sections['DATA_INTEGRITY']
+            validation_data["data_integrity"]["passed"] = bool(
+                re.search(r'Status:\s*PASS', content, re.I)
+            )
+            validation_data["data_integrity"]["details"] = content
         
-        # Parse companies
-        companies_match = re.search(r'Companies:\s*\[([^\]]+)\]', validation_section, re.I)
-        if companies_match:
-            companies = [item.strip() for item in companies_match.group(1).split(',')]
-            validation_data["companies_preserved"] = companies
+        # Parse KEYWORD_NATURALNESS
+        if 'KEYWORD_NATURALNESS' in sections:
+            content = sections['KEYWORD_NATURALNESS']
+            # Extract score
+            score_match = re.search(r'Score:\s*(\d+)\s*/\s*10', content, re.I)
+            if score_match:
+                validation_data["keyword_naturalness"]["score"] = int(score_match.group(1))
+            # Extract flagged keywords
+            flagged = []
+            in_flagged_section = False
+            for line in content.split('\n'):
+                if 'Flagged Keywords:' in line:
+                    in_flagged_section = True
+                    continue
+                if in_flagged_section and line.strip().startswith('- '):
+                    flagged.append(line.strip()[2:].strip())
+            validation_data["keyword_naturalness"]["flagged_keywords"] = flagged
         
-        # Check education preserved
-        if re.search(r'Education:\s*\[?Preserved\]?', validation_section, re.I):
-            validation_data["education_preserved"] = True
+        # Parse HUMAN_AUTHENTICITY
+        if 'HUMAN_AUTHENTICITY' in sections:
+            content = sections['HUMAN_AUTHENTICITY']
+            validation_data["human_authenticity"]["passed"] = bool(
+                re.search(r'Status:\s*PASS', content, re.I)
+            )
+            # Extract flagged bullets
+            flagged = []
+            in_flagged_section = False
+            for line in content.split('\n'):
+                if 'Flagged Bullets:' in line:
+                    in_flagged_section = True
+                    continue
+                if in_flagged_section and line.strip().startswith('- '):
+                    flagged.append(line.strip()[2:].strip())
+            validation_data["human_authenticity"]["flagged_bullets"] = flagged
         
-        # Parse format compliance
-        format_match = re.search(r'Format Compliance:\s*(\d+)%', validation_section, re.I)
-        if format_match:
-            validation_data["format_compliance"] = f"{format_match.group(1)}%"
+        # Parse RECRUITER_CREDIBILITY
+        if 'RECRUITER_CREDIBILITY' in sections:
+            content = sections['RECRUITER_CREDIBILITY']
+            validation_data["recruiter_credibility"]["passed"] = bool(
+                re.search(r'Status:\s*PASS', content, re.I)
+            )
+            # Extract reasons
+            reasons_match = re.search(r'Reasons?:\s*(.+?)(?=\n\n|\Z)', content, re.I | re.S)
+            if reasons_match:
+                validation_data["recruiter_credibility"]["reasons"] = reasons_match.group(1).strip()
         
-        # Parse data integrity
-        if "Data Integrity: COMPLETE" in validation_section or "All fields mapped successfully" in validation_section:
-            validation_data["data_integrity"] = "COMPLETE"
-            validation_data["all_fields_mapped"] = True
-            validation_data["validation_passed"] = True
+        # Parse VOICE_PRESERVATION
+        if 'VOICE_PRESERVATION' in sections:
+            content = sections['VOICE_PRESERVATION']
+            validation_data["voice_preservation"]["passed"] = bool(
+                re.search(r'Status:\s*PASS', content, re.I)
+            )
+            # Extract notes
+            notes_match = re.search(r'Notes?:\s*(.+?)(?=\n\n|\Z)', content, re.I | re.S)
+            if notes_match:
+                validation_data["voice_preservation"]["notes"] = notes_match.group(1).strip()
         
-        # Extract warnings
-        warning_pattern = r'⚠️\s*WARNING:\s*(.+?)(?=\n|$)'
-        warnings = re.findall(warning_pattern, validation_section, re.I)
-        validation_data["warnings"] = warnings
+        # Parse OVERALL_VERDICT
+        if 'OVERALL_VERDICT' in sections:
+            content = sections['OVERALL_VERDICT'].strip()
+            # Take first word
+            first_word = content.split()[0].upper() if content.split() else "REVISE"
+            if first_word in ["APPROVE", "REVISE", "REJECT"]:
+                validation_data["overall_verdict"] = first_word
+            else:
+                validation_data["overall_verdict"] = "REVISE"
         
-        # If there are warnings, validation didn't fully pass
-        if warnings:
-            validation_data["validation_passed"] = False
-    
-    # Fallback: Check for simple validation messages
-    if "All fields mapped" in critic_output or "VALIDATION: ✓" in critic_output:
-        validation_data["all_fields_mapped"] = True
-        validation_data["validation_passed"] = True
-        validation_data["data_integrity"] = "COMPLETE"
+        # Parse CORRECTION_INSTRUCTIONS
+        if 'CORRECTION_INSTRUCTIONS' in sections:
+            validation_data["correction_instructions"] = sections['CORRECTION_INSTRUCTIONS'].strip()
+        
+        # Set validation_passed based on overall_verdict
+        validation_data["validation_passed"] = (validation_data["overall_verdict"] == "APPROVE")
+        
+    except Exception as e:
+        # On any parsing error, return safe defaults
+        print(f"Warning: Failed to parse validation report: {e}")
+        validation_data = {
+            "data_integrity": {"passed": False, "details": ""},
+            "keyword_naturalness": {"score": 5, "flagged_keywords": []},
+            "human_authenticity": {"passed": False, "flagged_bullets": []},
+            "recruiter_credibility": {"passed": False, "reasons": ""},
+            "voice_preservation": {"passed": False, "notes": ""},
+            "overall_verdict": "REVISE",
+            "correction_instructions": "",
+            "validation_passed": False
+        }
     
     return validation_data
 
